@@ -140,8 +140,9 @@
   }
 
   /* ---------- conditions: space weather + daylight ---------- */
-  function spaceWeather(notes) {
-    const now = Date.now(), within = (n, h) => now - Date.parse(n.issued) < h * 3600e3;
+  // "now" is the time the notices describe: the present for live data, the save date for the saved copy
+  function spaceWeather(notes, now = Date.now()) {
+    const within = (n, h) => now - Date.parse(n.issued) < h * 3600e3;
     const sep = notes.filter((n) => n.type === "SEP" && within(n, 72));
     if (sep.length) return { cls: "bad", word: "SHELTER", sub: "Solar particle alert in the last 72 h (measured near Earth). Stay in the habitat.", n: sep[0] };
     const cme = notes.filter((n) => n.type === "CME" && /Mars/.test(n.body || "") && within(n, 72));
@@ -154,16 +155,27 @@
   function renderConditions() {
     let html = '<div class="lbl-lg">Conditions</div>';
     if (S.donki && S.donki.notes) {
-      const v = spaceWeather(S.donki.notes);
-      html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${esc(v.sub)}${v.n ? ` <a href="${esc(v.n.url)}" target="_blank" rel="noopener">NASA DONKI</a>` : ""}</span></div>`;
+      const live = !!S.donki.live, saved = S.donki.fetched || "an earlier date";
+      const ref = live ? Date.now() : (Date.parse(`${S.donki.fetched}T23:59:59+08:00`) || Date.now());
+      const v = spaceWeather(S.donki.notes, ref);
+      const src = live ? "Live NASA DONKI notices" : `Saved NASA DONKI notices from ${saved}; the live feed is busy`;
+      html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${live ? "" : `As of ${esc(saved)}: `}${esc(v.sub)} ${src}${v.n ? ` · <a href="${esc(v.n.url)}" target="_blank" rel="noopener">latest notice</a>` : ""}.</span></div>`;
     }
     if (S.meda && S.meda.sols && S.meda.sols.length) {
       const w = S.meda.sols[S.meda.sols.length - 1];
       const [rh, rm] = w.sunrise.split(":").map(Number), [sh, sm] = w.sunset.split(":").map(Number);
       const day = ((sh * 60 + sm) - (rh * 60 + rm) - 120) / 60, fits = day >= S.m.totals.eva_h;
-      html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h EVA · ${w.min_temp}°C to ${w.max_temp}°C · Perseverance MEDA, sol ${w.sol}</span></div>`;
+      html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h EVA · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
     $("#conditions").innerHTML = html;
+  }
+
+  // e.g. "sol 1133, April 2024": the public MEDA feed stops in 2024, so the app never calls it live
+  function medaLatest() {
+    const s = S.meda && S.meda.sols && S.meda.sols[S.meda.sols.length - 1];
+    if (!s) return "";
+    const when = new Date(`${s.terrestrial_date}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    return `sol ${s.sol}, ${when}`;
   }
 
   function refreshDonki() {
@@ -171,7 +183,8 @@
     fetch(`https://api.nasa.gov/DONKI/notifications?startDate=${d(start)}&endDate=${d(end)}&type=all&api_key=DEMO_KEY`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((notes) => {
-        S.donki = { notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 1500) })) };
+        S.donki = { live: true, fetched: d(end),
+          notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 1500) })) };
         renderConditions();
       })
       .catch(() => {});
@@ -798,7 +811,8 @@
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
         <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech.</li>
-        <li>Weather: Perseverance MEDA summaries, NASA/JPL-Caltech. Space weather: NASA DONKI (CCMC).</li></ul>
+        <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech. They are not live.</li>
+        <li>Space weather: NASA DONKI (CCMC), live when the free demo key allows; otherwise the app shows a saved copy and its date.</li></ul>
       <h3>Use of AI tools</h3>
       <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The mission badge is an AI-generated image (Higgsfield). All map and rover data are from NASA, USGS and ESA.</p>`;
   }
