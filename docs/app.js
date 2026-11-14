@@ -685,7 +685,7 @@
     if (!m.grid || !window.Worker) return;
     Promise.all(["grid_slope.u8", "grid_rough.u8", "grid_dem.i16"].map((f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.arrayBuffer())))
       .then(([slope, rough, dem]) => {
-        worker = new Worker("router.js?v=6");
+        worker = new Worker("router.js?v=7");
         worker.onmessage = onWorker;
         worker.postMessage({ type: "init", grid: m.grid, slope, rough, dem }, [slope, rough, dem]);
       }).catch(() => {});
@@ -851,7 +851,7 @@
         <li>The walking curve is Earth-calibrated. Real suited speed depends on the suit, the load and fatigue.</li>
         <li>Solar-particle alerts come from sensors near Earth. Eruption (CME) alerts include Mars arrival times.</li>
         <li>The public MEDA weather summaries end in 2024, so the daylight check uses the latest available sols.</li>
-        <li>Base camp sits on flat ground (under 8° everywhere within 50 m), but landing-zone size and rocket-plume distance from the sample depot are not checked.</li></ul>
+        <li>Base camp sits on flat ground (slopes up to ${(m.stops.find((s) => s.id === "base").terrain || {}).slope_max}° within 50 m), but landing-zone size and rocket-plume distance from the sample depot are not checked.</li></ul>
       <h3>Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>

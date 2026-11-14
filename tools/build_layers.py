@@ -121,8 +121,9 @@ def main():
     cost[blocked] = np.inf
 
     def rc_of(lon, lat):
+        """The grid cell that contains a point (floor, so it is the inverse of lonlat_of, which returns cell centres)."""
         x, y = lonlat_to_xy(lon, lat)
-        return int(round((top - y) / px_y)), int(round((x - left) / px_x))
+        return int(math.floor((top - y) / px_y)), int(math.floor((x - left) / px_x))
 
     def lonlat_of(r, c):
         return xy_to_lonlat(left + (c + 0.5) * px_x, top - (r + 0.5) * px_y)
@@ -142,14 +143,14 @@ def main():
 
     mcp = MCP_Geometric(cost, fully_connected=True, sampling=(gy, gx))
 
-    legs, coords_all, profile = [], [], []
-    t_walk, dist_total = 0.0, 0.0
+    legs, coords_all, paths_all, profile = [], [], [], []
+    t_walk, dist_total, flat_total = 0.0, 0.0, 0.0
     for a_id, b_id in zip(ROUTE_ORDER[:-1], ROUTE_ORDER[1:]):
         A, B = stops[a_id], stops[b_id]
         cum, _ = mcp.find_costs([A["rc"]], [B["rc"]])
         path = mcp.traceback(B["rc"])
         secs = float(cum[B["rc"]])
-        dist = gain = loss = 0.0
+        dist = flat = gain = loss = 0.0   # dist = walked distance (with height change); flat = distance on the map
         max_s = 0.0
         prev = None
         for (r, c) in path:
@@ -157,18 +158,24 @@ def main():
             max_s = max(max_s, float(slope[r, c]))
             if prev:
                 pr, pc, pz = prev
-                d = math.sqrt(((c - pc) * gx) ** 2 + ((r - pr) * gy) ** 2 + (z - pz) ** 2)
-                dist += d
+                h2 = ((c - pc) * gx) ** 2 + ((r - pr) * gy) ** 2
+                flat += math.sqrt(h2)
+                dist += math.sqrt(h2 + (z - pz) ** 2)
                 gain += max(0.0, z - pz)
                 loss += max(0.0, pz - z)
-            profile.append(dict(d=round(dist_total + dist, 1), z=round(z, 1), s=round(float(slope[r, c]), 1), leg=len(legs)))
+            # d is the map distance, so a point on the drawn route line can be found from it;
+            # ts is the walking time since the start of this leg, read from the route search itself
+            profile.append(dict(d=round(flat_total + flat, 1), z=round(z, 1), s=round(float(slope[r, c]), 1), leg=len(legs),
+                                ts=float(cum[r, c])))
             prev = (r, c, z)
         coords = [[round(v, 6) for v in lonlat_of(r, c)] for (r, c) in path]
         coords_all.append(coords)
+        paths_all.append(path)
         legs.append(dict(frm=a_id, to=b_id, dist_m=round(dist), walk_min=round(secs / 60, 1),
                          gain_m=round(gain), loss_m=round(loss), max_slope=round(max_s, 1)))
         t_walk += secs
         dist_total += dist
+        flat_total += flat
 
     # Real-world check: Perseverance's climb from the crater floor to the delta top (sols 690-736).
     # Plan our own walking route between the rover's start and end points (the planner never sees the
@@ -262,27 +269,26 @@ def main():
     worst = dict(margin_min=1e9)
     leg_start = 0.0
     for i, (a_id, b_id) in enumerate(zip(ROUTE_ORDER[:-1], ROUTE_ORDER[1:])):
-        leg_pts = [p for p in profile if p["leg"] == i]
-        leg_t = legs[i]["walk_min"]
-        for j, p in enumerate(leg_pts):
-            frac = j / max(1, len(leg_pts) - 1)
-            p["t"] = round(leg_start + frac * leg_t, 1)
-        leg_start += leg_t + stops[b_id]["dwell_min"]
+        for p in profile:
+            if p["leg"] == i:   # time at each point = the route search's own walking time, not an even spread
+                p["t"] = round(leg_start + p.pop("ts") / 60, 1)
+        leg_start += legs[i]["walk_min"] + stops[b_id]["dwell_min"]
     bad_budget = EVA_LIMIT_H * 60
     worst_bad = dict(margin_min=1e9)
     worst_suit = dict(back=-1.0)
-    for i, coords in enumerate(coords_all):
+    for i, (coords, path) in enumerate(zip(coords_all, paths_all)):
         leg_pts = [p for p in profile if p["leg"] == i]
-        for p, (lon, lat) in zip(leg_pts, coords):
-            r, c = rc_of(lon, lat)
+        for p, (lon, lat), (r, c) in zip(leg_pts, coords, path):
             back_min = float(ret_min[r, c]) if np.isfinite(ret_min[r, c]) else 1e9
             p["back"] = round(back_min, 1)
-            margin = budget_min - (p["t"] + back_min)
-            if margin < worst["margin_min"]:
-                worst = dict(margin_min=round(margin, 1), lon=lon, lat=lat, t=p["t"], back=round(back_min, 1))
-            margin_bad = bad_budget - (p["t"] + BAD_DAY_FACTOR * back_min)
-            if margin_bad < worst_bad["margin_min"]:
-                worst_bad = dict(margin_min=round(margin_bad, 1), lon=lon, lat=lat, t=p["t"],
+            # On the way home, time + walk-home stays the same from point to point, so many points tie.
+            # A later point replaces the tightest only if it is clearly tighter (over 0.15 min): the earliest is kept.
+            margin = round(budget_min - (p["t"] + back_min), 1)
+            if margin < worst["margin_min"] - 0.15:
+                worst = dict(margin_min=margin, lon=lon, lat=lat, t=p["t"], back=round(back_min, 1))
+            margin_bad = round(bad_budget - (p["t"] + BAD_DAY_FACTOR * back_min), 1)
+            if margin_bad < worst_bad["margin_min"] - 0.15:
+                worst_bad = dict(margin_min=margin_bad, lon=lon, lat=lat, t=p["t"],
                                  back=round(BAD_DAY_FACTOR * back_min, 1), leg=i)
             if back_min > worst_suit["back"]:   # suit failure: farthest point from base in walking time
                 worst_suit = dict(back=round(back_min, 1), margin_min=round(SUIT_FAIL_MIN - back_min, 1),
@@ -306,13 +312,13 @@ def main():
         t = depart
 
     # Terrain around each stop (50 m radius) for the stop panel.
-    rad = int(round(50 / a.res))
-    yy, xx = np.ogrid[-rad:rad + 1, -rad:rad + 1]
+    ry, rx = int(math.ceil(50 / gy)), int(math.ceil(50 / gx))   # cells are narrower east-west than north-south
+    yy, xx = np.ogrid[-ry:ry + 1, -rx:rx + 1]
     disk = (yy * gy) ** 2 + (xx * gx) ** 2 <= 50 ** 2
     for st in stops.values():
         r, c = st["rc"]
-        r0, r1, c0, c1 = max(0, r - rad), min(h, r + rad + 1), max(0, c - rad), min(w, c + rad + 1)
-        m = disk[r0 - (r - rad):r1 - (r - rad), c0 - (c - rad):c1 - (c - rad)]
+        r0, r1, c0, c1 = max(0, r - ry), min(h, r + ry + 1), max(0, c - rx), min(w, c + rx + 1)
+        m = disk[r0 - (r - ry):r1 - (r - ry), c0 - (c - rx):c1 - (c - rx)]
         sl, rg, zz = slope[r0:r1, c0:c1][m], rough[r0:r1, c0:c1][m], dem[r0:r1, c0:c1][m]
         st["terrain"] = dict(radius_m=50, slope_mean=round(float(np.nanmean(sl)), 1), slope_max=round(float(np.nanmax(sl)), 1),
                              rough_rms=round(float(np.nanmean(rg)), 2), elev_min=round(float(np.nanmin(zz)), 1),
@@ -378,6 +384,9 @@ def main():
     json.dump(route, open(os.path.join(OUT, "route.geojson"), "w"), separators=(",", ":"))
 
     step = max(1, len(profile) // 600)
+    # thin the profile for the web app, but always keep the first and last point of every leg (the stops)
+    thin = [p for i, p in enumerate(profile) if i % step == 0 or i == len(profile) - 1
+            or profile[i - 1]["leg"] != p["leg"] or profile[min(i + 1, len(profile) - 1)]["leg"] != p["leg"]]
     mission = dict(
         generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         dtm=os.path.basename(dtm_path), grid_m=round(gx, 2), aoi=AOI, overlay_bounds=bounds, grid=grid,
@@ -391,7 +400,7 @@ def main():
                       suit=dict(limit_min=SUIT_FAIL_MIN, worst=worst_suit)),
         assumptions=dict(v_flat_ms=V_FLAT, max_slope_deg=MAX_SLOPE, rough_m=ROUGH_M, rough_penalty=ROUGH_PENALTY,
                          eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, bad_day_factor=BAD_DAY_FACTOR, suit_fail_min=SUIT_FAIL_MIN),
-        profile=profile[::step],
+        profile=thin,
         validation=validation, rover_check=rover_check, timeline=timeline,
     )
     json.dump(mission, open(os.path.join(OUT, "mission.json"), "w"), separators=(",", ":"))

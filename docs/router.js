@@ -172,7 +172,7 @@ function plan(p, stops, order) {
   const back = search(cost, cell[order[0]], -1, p.vFlat).dist;   // walk-back field from base camp
 
   const legs = [], profile = [], where = [];
-  let dTot = 0, tStart = 0;
+  let dTot = 0, fTot = 0, tStart = 0;
   const dwell = Object.fromEntries(stops.map((s) => [s.id, s.dwell_min || 0]));
   for (let k = 0; k < order.length - 1; k++) {
     const a = cell[order[k]], b = cell[order[k + 1]];
@@ -181,37 +181,44 @@ function plan(p, stops, order) {
     const path = [];
     for (let v = b; v !== -1; v = prev[v]) { path.push(v); if (v === a) break; }
     path.reverse();
-    let d = 0, gain = 0, loss = 0, maxS = 0;
+    let d = 0, flat = 0, gain = 0, loss = 0, maxS = 0;   // d = walked distance (with height change); flat = distance on the map
     const coords = [];
     for (let j = 0; j < path.length; j++) {
       const v = path[j], z = zOf(v), s = G.slope[v] * G.slope_scale;
       if (j) {
         const u = path[j - 1], dz = z - zOf(u);
         const dr = Math.floor(v / W) - Math.floor(u / W), dc = (v % W) - (u % W);
-        d += Math.sqrt((dc * G.gx) ** 2 + (dr * G.gy) ** 2 + dz * dz);
+        const h2 = (dc * G.gx) ** 2 + (dr * G.gy) ** 2;
+        flat += Math.sqrt(h2);
+        d += Math.sqrt(h2 + dz * dz);
         if (dz > 0) gain += dz; else loss -= dz;
       }
       maxS = Math.max(maxS, s);
       coords.push(lonlat(v));
       where.push(lonlat(v));
-      profile.push({ d: Math.round((dTot + d) * 10) / 10, z: Math.round(z * 10) / 10, s: Math.round(s * 10) / 10, leg: k,
+      // profile d is the map distance, so the crew dot can be placed on the drawn route line from it
+      profile.push({ d: Math.round((fTot + flat) * 10) / 10, z: Math.round(z * 10) / 10, s: Math.round(s * 10) / 10, leg: k,
         t: Math.round((tStart + dist[v] / 60) * 10) / 10, back: Math.round((back[v] / 60) * 10) / 10 });
     }
     const walkMin = dist[b] / 60;
     legs.push({ frm: order[k], to: order[k + 1], dist_m: Math.round(d), walk_min: Math.round(walkMin * 10) / 10,
       gain_m: Math.round(gain), loss_m: Math.round(loss), max_slope: Math.round(maxS * 10) / 10, coords });
     dTot += d;
+    fTot += flat;
     tStart += walkMin + (k + 1 < order.length - 1 ? dwell[order[k + 1]] : 0);
   }
   const budget = p.evaH * 60 * (1 - p.reserve);
   const badBudget = p.evaH * 60, bf = p.badFactor || 2;   // bad day: half speed home, reserve may be used
   const suitLimit = p.suitMin || 50;   // suit failure: get home on the 1 h backup oxygen
   let worst = { margin_min: 1e9 }, worstBad = { margin_min: 1e9 }, worstSuit = { back: -1 };
+  // On the way home, time + walk-home stays the same from point to point, so many points tie for "tightest".
+  // A later point replaces the tightest one only if it is clearly tighter (more than 0.15 min), which keeps the earliest.
+  const EPS = 0.15;
   profile.forEach((q, i) => {
     const m = budget - (q.t + q.back);
-    if (m < worst.margin_min) worst = { margin_min: Math.round(m * 10) / 10, t: q.t, back: q.back, lon: where[i][0], lat: where[i][1] };
+    if (m < worst.margin_min - EPS) worst = { margin_min: Math.round(m * 10) / 10, t: q.t, back: q.back, lon: where[i][0], lat: where[i][1] };
     const mb = badBudget - (q.t + bf * q.back);
-    if (mb < worstBad.margin_min) worstBad = { margin_min: Math.round(mb * 10) / 10, t: q.t, back: Math.round(bf * q.back * 10) / 10, lon: where[i][0], lat: where[i][1], leg: q.leg };
+    if (mb < worstBad.margin_min - EPS) worstBad = { margin_min: Math.round(mb * 10) / 10, t: q.t, back: Math.round(bf * q.back * 10) / 10, lon: where[i][0], lat: where[i][1], leg: q.leg };
     if (q.back > worstSuit.back) worstSuit = { back: q.back, margin_min: Math.round((suitLimit - q.back) * 10) / 10, t: q.t, lon: where[i][0], lat: where[i][1], leg: q.leg };
   });
   // turn-back time at each stop
@@ -243,7 +250,8 @@ function plan(p, stops, order) {
     walkback: { budget_min: Math.round(budget), worst, eva_limit_h: p.evaH, reserve: p.reserve,
       bad: { factor: bf, budget_min: Math.round(badBudget), worst: worstBad },
       suit: { limit_min: suitLimit, worst: worstSuit } },
-    profile: profile.filter((_, i) => i % step === 0 || i === profile.length - 1),
+    // thinned for drawing, but the first and last point of every leg (the stops) are always kept
+    profile: profile.filter((q, i) => i % step === 0 || i === profile.length - 1 || (i > 0 && profile[i - 1].leg !== q.leg) || profile[Math.min(i + 1, profile.length - 1)].leg !== q.leg),
     timeline,
     field: toField(back),
   };

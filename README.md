@@ -34,8 +34,8 @@ of the walk, the crew must be able to get back to base camp inside the EVA time 
    - **Suit failure:** walk home ≤ 50 min (1 h of backup oxygen).
 
 ## Real-world checks
-- Our slope map agrees with Perseverance's own tilt sensor at 189 rover stops: 1.27° average difference, 94 % within 3°.
-- On the rover's climb to the delta top (sols 693–736), a straight line would cross 150 m of slopes steeper than 15°; our planned walk crosses none (`tools/rover_check.py` draws the map).
+- Our slope map agrees with Perseverance's own tilt sensor at 189 rover stops: 1.33° average difference, 93 % within 3°.
+- On the rover's climb to the delta top (sols 693–736), a straight line would cross 154 m of slopes steeper than 15°; our planned walk crosses none (`tools/rover_check.py` draws the map).
 
 These are planning assumptions for a hackathon prototype, not NASA flight rules. They are listed in the app under "How it works".
 
