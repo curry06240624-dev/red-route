@@ -74,7 +74,8 @@ def raw_images(sol, want=6):
             if cam in CAMERAS and files.get("medium") and "_THM" not in files.get("medium", ""):
                 picks.append(dict(cam=cam, title=im.get("title", ""), small=files.get("small"),
                                   medium=files.get("medium"), large=files.get("large") or files.get("full_res"),
-                                  date=im.get("date_taken_utc", ""), sol=sol, link=im.get("link", "")))
+                                  date=im.get("date_taken_utc", ""), sol=sol, link=im.get("link", ""),
+                                  credit=im.get("credit") or "NASA/JPL-Caltech"))   # the feed gives each image its own credit
         if len(d.get("images", [])) < 100:
             break
     # round-robin over cameras so the gallery mixes Navcam, Mastcam-Z, Hazcam and close-ups

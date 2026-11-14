@@ -23,7 +23,7 @@
   const map = L.map("map", { crs: L.CRS.EPSG4326, center: [18.462, 77.396], zoom: 14, minZoom: 3, maxZoom: 19,
     zoomSnap: 0.25, zoomDelta: 0.5, zoomControl: false });
   L.control.zoom({ position: "bottomright" }).addTo(map);
-  map.attributionControl.setPrefix(false);
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
   const credit = 'Tiles: <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA JPL Mars Trek</a>';
   const BASES = {
     hirise: { name: "HiRISE 25 cm", layer: L.tileLayer(trekUrl("JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd", "png"),
@@ -36,7 +36,8 @@
       { maxNativeZoom: 7, maxZoom: 19, attribution: `${credit} · MOLA (NASA/GSFC)` }) },
   };
   // zoomed-out context under everything: ESA Mars Express HRSC blended with NASA MOLA
-  L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, className: "ctx-relief" }).addTo(map);
+  L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, className: "ctx-relief",
+    attribution: "Relief: HRSC (ESA/DLR/FU Berlin) + MOLA (NASA)" }).addTo(map);
   let baseKey = "hirise";
   BASES.hirise.layer.addTo(map);
 
@@ -225,6 +226,16 @@
     if (fly) map.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 15.5), { duration: 0.7 });
   }
 
+  // e.g. "NASA/JPL-Caltech · ASU · LANL/CNES/IRAP": every team credited on this stop's photos (each photo's own credit is in the viewer)
+  function photoCredits(photos) {
+    const base = "NASA/JPL-Caltech", extra = [];
+    for (const p of photos) {
+      const c = (p.credit || base).replace(base, "").replace(/^\//, "");
+      if (c && !extra.includes(c)) extra.push(c);
+    }
+    return [base, ...extra].join(" · ");
+  }
+
   function renderStopPanel() {
     const m = S.m, s = stopById(S.sel);
     if (!s) return;
@@ -237,7 +248,7 @@
     if (photos.length) {
       html += `<div class="grid6">${photos.slice(0, 6).map((p, k) => `<button data-k="${k}" aria-label="Open photo ${k + 1}"><img src="${p.thumb || p.small || p.medium}" alt="${esc(p.cam)} view near ${esc(s.name)}"></button>`).join("")}</div>
         <button class="more" id="allPhotos">View all ${photos.length} rover photos</button>
-        <div class="src">Perseverance, sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m from this stop` : ""} · NASA/JPL-Caltech</div>`;
+        <div class="src">Perseverance, sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m from this stop` : ""} · ${esc(photoCredits(photos))}</div>`;
     }
     if (tr) {
       html += `<hr class="r"><div class="lbl-lg">Terrain within 50 m</div><table class="tbl">
@@ -792,7 +803,7 @@
     const p = lb.s.photos[lb.k];
     $("#lbImg").src = p.large || p.medium;
     $("#lbImg").alt = `${p.cam} image near ${lb.s.name}`;
-    $("#lbCap").innerHTML = `${lb.k + 1} / ${lb.s.photos.length} · Perseverance ${esc(p.cam.replace(/_/g, " ").toLowerCase())} · sol ${p.sol} · ${esc(lb.s.name)} · NASA/JPL-Caltech${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">source</a>` : ""}`;
+    $("#lbCap").innerHTML = `${lb.k + 1} / ${lb.s.photos.length} · Perseverance ${esc(p.cam.replace(/_/g, " ").toLowerCase())} · sol ${p.sol} · ${esc(lb.s.name)} · ${esc(p.credit || "NASA/JPL-Caltech")}${p.link ? ` · <a href="${esc(p.link)}" target="_blank" rel="noopener">source</a>` : ""}`;
   }
   const step = (d) => { lb.k = (lb.k + d + lb.s.photos.length) % lb.s.photos.length; showPhoto(); };
   $("#lbPrev").onclick = () => step(-1);
@@ -855,9 +866,10 @@
       <h3>Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
-        <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech.</li>
-        <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech. They are not live.</li>
-        <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service; if it does not answer, the app shows a saved copy and its date.</li></ul>
+        <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech (Mastcam-Z: NASA/JPL-Caltech/ASU; SuperCam: NASA/JPL-Caltech/LANL/CNES/IRAP).</li>
+        <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech/CAB. They are not live.</li>
+        <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service; if it does not answer, the app shows a saved copy and its date.</li>
+        <li>Software: Leaflet map library (BSD 2-Clause licence); Barlow fonts (SIL Open Font License). The full list is in DATA.md in the repo.</li></ul>
       <h3>Use of AI tools</h3>
       <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The mission badge is an AI-generated image (Higgsfield). All map and rover data are from NASA, USGS and ESA.</p>`;
   }

@@ -52,7 +52,8 @@ python tools/rover_check.py
 # 3. serve the web app
 python -m http.server 8765 --directory docs
 ```
-Python packages: numpy, scipy, scikit-image, rasterio, pillow.
+Python packages: numpy, scipy, scikit-image, rasterio, pillow. The web app uses the Leaflet map library and the Barlow fonts.
+All data, software and font credits are in DATA.md.
 
 ## Use of AI tools
 The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
