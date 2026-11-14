@@ -1,7 +1,8 @@
 /* Red Route routing worker.
    Least-time walking paths on the terrain grid exported by tools/build_layers.py.
    Same model as the Python build: Tobler-style speed on slope, no-go above the slope limit,
-   rough ground slower, edge cost = distance x mean cell cost (like scikit-image MCP_Geometric). */
+   rough ground slower, edge cost = distance x mean cell cost (like scikit-image MCP_Geometric).
+   AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 let G = null;
 
 self.onmessage = (e) => {

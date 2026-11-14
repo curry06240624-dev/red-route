@@ -1,5 +1,7 @@
 """Fetch the context data Red Route shows next to the map.
 
+AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md.
+
 - Perseverance raw images from the sols the rover spent at each stop (NASA/JPL-Caltech raw image API)
 - Perseverance MEDA weather summaries (NASA/JPL-Caltech weather feed)
 - Space-weather notifications from NASA's DONKI service (CCMC web service; api.nasa.gov as a second try)

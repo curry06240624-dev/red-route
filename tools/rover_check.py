@@ -7,7 +7,9 @@ build_layers.py, which measures them on the full-resolution slope grid.
 
 Run after build_layers.py:  py -3.12 -I tools/rover_check.py
 Writes docs/img/rover_check.jpg. Colours match the app: our walk orange, the rover blue.
-Based on the team's validation script; code written with help from an AI assistant (Claude by Anthropic).
+Based on the team's validation script.
+
+AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md.
 """
 import json
 import os

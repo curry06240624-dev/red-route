@@ -1,5 +1,7 @@
 """Build the Red Route terrain layers and the default Marswalk route.
 
+AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md.
+
 Data (all from NASA / USGS, see DATA.md):
   raw/JEZ_HiRISE_DTM_1m.tif  USGS Astrogeology, Mars 2020 TRN HiRISE DTM (1 m/px, Jezero crater)
   raw/JEZ_CTX_DTM_20m.tif    USGS Astrogeology, Mars 2020 TRN CTX DTM (20 m/px), coarse fallback

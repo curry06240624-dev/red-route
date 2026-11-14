@@ -1,7 +1,8 @@
 /* Red Route: a Marswalk planner for Jezero Crater.
    Map tiles: NASA JPL Mars Trek (WMTS, Mars 2000 sphere, geographic grid).
    Route, slope, roughness and walk-home layers: tools/build_layers.py, from the USGS Mars 2020 TRN HiRISE DTM.
-   Live re-planning and the get-home zone: router.js (web worker) on the exported terrain grid. */
+   Live re-planning and the get-home zone: router.js (web worker) on the exported terrain grid.
+   AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 (() => {
   "use strict";
   const TREK = "https://trek.nasa.gov/tiles/Mars/EQ/";
