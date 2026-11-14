@@ -20,7 +20,7 @@ of the walk, the crew must be able to get back to base camp inside the EVA time 
 - **Topographic:** slope and rough ground computed from the 1 m HiRISE elevation model (USGS Mars 2020 TRN DTM).
 - **Safety:** three get-home checks, a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, and the 50-minute backup-oxygen line.
 - **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
-- **Conditions:** NASA DONKI space-weather notices (live) and Perseverance MEDA weather summaries.
+- **Conditions:** NASA DONKI space-weather notices (live when the free demo key allows, otherwise a saved copy with its date) and the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live).
 - **Context:** Perseverance's real traverse.
 
 ## How the route is found
