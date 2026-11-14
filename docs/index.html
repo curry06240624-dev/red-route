@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
@@ -26,9 +26,21 @@
 
 <nav class="topnav pnl" aria-label="Panels">
   <button data-open="layersPanel">LAYERS</button>
-  <button data-open="planPanel">PLAN YOUR EVA</button>
+  <button data-open="planPanel"><span class="gnum" aria-hidden="true">3</span>PLAN YOUR EVA</button>
   <button data-open="about">HOW IT WORKS</button>
+  <button class="help" id="helpBtn" aria-label="How to use Red Route" title="How to use">?</button>
 </nav>
+
+<div class="guide pnl" id="guide" role="dialog" aria-labelledby="guideTitle" hidden>
+  <div class="lbl-lg" id="guideTitle">How to use Red Route</div>
+  <p class="guide-lead">Plan a walk on Mars and check, at every step, that the crew can still get home.</p>
+  <ol class="guide-steps">
+    <li><span class="gn">1</span><div><b>Check the plan</b><small>Three green PASS checks mean the crew can always get home. Leave each stop before its "Leave by" time.</small></div></li>
+    <li><span class="gn">2</span><div><b>Walk the plan</b><small>Press Walk the plan. The blue dot is the crew; the green area is where they can still get home from.</small></div></li>
+    <li><span class="gn">3</span><div><b>Change it</b><small>Drag a numbered stop on the map, or open Plan your EVA. Every check updates at once.</small></div></li>
+  </ol>
+  <div class="guide-bar"><button class="cta" id="guideGo"><span class="tri"></span>Walk the plan</button><button class="ghost" id="guideClose">I'll look around</button></div>
+</div>
 
 <aside class="pnl left" id="left">
   <section id="checks"></section>
@@ -45,7 +57,7 @@
 <div class="pnl drawer" id="planPanel" hidden></div>
 
 <footer class="pnl timeline" id="timeline">
-  <button class="play" id="playBtn" aria-label="Play the EVA"><span class="tri"></span></button>
+  <button class="play" id="playBtn" aria-label="Walk the plan"><span class="tri"></span><span class="pl">Walk the plan</span><span class="gnum" aria-hidden="true">2</span></button>
   <div class="tl-wrap"><svg id="tlSvg" aria-label="EVA timeline and elevation profile"></svg><div class="tl-tip" id="tlTip" hidden></div></div>
 </footer>
 
@@ -64,6 +76,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

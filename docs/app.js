@@ -58,6 +58,7 @@
     renderAll();
     fitRoute();
     renderLayersPanel(); renderPlanPanel(mission); renderAbout(mission);
+    maybeShowGuide();
     initWorker(mission);
     refreshDonki();
   }).catch((e) => { console.error(e); $("#checks").innerHTML = '<div class="bad">Could not load the mission data.</div>'; });
@@ -111,7 +112,7 @@
   function renderChecks() {
     const m = S.m, t = m.totals, rc = m.rover_check;
     const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span></div>`).join("");
-    $("#checks").innerHTML = `<div class="lbl-lg">Get-home checks</div>${rows}
+    $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
       <div class="mission">${t.dist_km.toFixed(1)} KM · ${fmtMin(t.eva_h * 60).toUpperCase()} EVA · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°</div>
       ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots. <a href="#" id="proofLink">See the test</a></div>` : ""}
       <hr class="r">`;
@@ -446,7 +447,12 @@
   const eva = { T: 0, playing: false, raf: 0, marker: null, pulse: null };
   const zone = { field: null, overlay: null, o2: null, canvas: document.createElement("canvas"), img: null, url: null, busy: false, pending: null, active: false };
   const playBtn = $("#playBtn");
-  playBtn.onclick = () => (eva.playing ? pause() : play());
+  playBtn.onclick = () => { closeGuide(); eva.playing ? pause() : play(); };
+  function setPlayBtn(mode) {   // "play" | "pause" | "replay"
+    const label = mode === "pause" ? "Pause" : mode === "replay" ? "Walk it again" : "Walk the plan";
+    playBtn.innerHTML = `<span class="${mode === "pause" ? "sq" : "tri"}"></span><span class="pl">${label}</span><span class="gnum" aria-hidden="true">2</span>`;
+    playBtn.setAttribute("aria-label", label);
+  }
 
   function setField(field) {
     zone.field = field;
@@ -581,8 +587,7 @@
     const start = eva.T >= end - 0.5 ? 0 : eva.T;
     if (start === 0) { const b = stopById("base"); map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 15), { duration: 0.6 }); }
     eva.playing = true;
-    playBtn.innerHTML = '<span class="sq"></span>';
-    playBtn.setAttribute("aria-label", "Pause");
+    setPlayBtn("pause");
     const t0 = performance.now(), realMs = 32000 * ((end - start) / end);
     const frame = (now) => {
       if (!eva.playing) return;
@@ -596,8 +601,8 @@
   function pause() {
     eva.playing = false;
     cancelAnimationFrame(eva.raf);
-    playBtn.innerHTML = '<span class="tri"></span>';
-    playBtn.setAttribute("aria-label", "Play the EVA");
+    const P = S.m && S.m.profile;
+    setPlayBtn(P && eva.T >= P[P.length - 1].t ? "replay" : "play");
   }
 
   /* ---------- live re-planning (web worker) ---------- */
@@ -693,8 +698,9 @@
   /* ---------- panels ---------- */
   function openModal(id) { const e = document.getElementById(id); e.hidden = false; }
   function wireClose(root) { root.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => { document.getElementById(b.dataset.close).hidden = true; syncNav(); })); }
-  function syncNav() { document.querySelectorAll(".topnav button").forEach((b) => b.classList.toggle("on", !document.getElementById(b.dataset.open).hidden)); }
-  document.querySelectorAll(".topnav button").forEach((b) => (b.onclick = () => {
+  function syncNav() { document.querySelectorAll(".topnav button[data-open]").forEach((b) => b.classList.toggle("on", !document.getElementById(b.dataset.open).hidden)); }
+  document.querySelectorAll(".topnav button[data-open]").forEach((b) => (b.onclick = () => {
+    closeGuide();
     const target = document.getElementById(b.dataset.open), show = target.hidden;
     for (const id of ["layersPanel", "planPanel", "about"]) document.getElementById(id).hidden = true;
     target.hidden = !show;
@@ -702,6 +708,24 @@
   }));
   wireClose(document);
   $("#about").addEventListener("click", (e) => { if (e.target.id === "about") { e.currentTarget.hidden = true; syncNav(); } });
+
+  /* ---------- first-visit guide: 3 steps, numbers pulse on the real controls ---------- */
+  const GUIDE_KEY = "rr-guide-v1";
+  function openGuide() { $("#guide").hidden = false; document.body.classList.add("guide-on"); }
+  function closeGuide() {
+    if ($("#guide").hidden) return;
+    $("#guide").hidden = true;
+    document.body.classList.remove("guide-on");
+    try { localStorage.setItem(GUIDE_KEY, "seen"); } catch (e) { /* private mode: show it again next time */ }
+  }
+  function maybeShowGuide() {
+    let seen = false;
+    try { seen = localStorage.getItem(GUIDE_KEY) === "seen"; } catch (e) { /* ignore */ }
+    if (!seen) openGuide();
+  }
+  $("#guideGo").onclick = () => { closeGuide(); play(); };
+  $("#guideClose").onclick = closeGuide;
+  $("#helpBtn").onclick = () => ($("#guide").hidden ? openGuide() : closeGuide());
 
   /* ---------- photo gallery ---------- */
   const lb = { s: null, k: 0 };
@@ -719,7 +743,7 @@
   $("#lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") $("#lightbox").hidden = true; });
   document.addEventListener("keydown", (e) => {
     if (!$("#lightbox").hidden) { if (e.key === "ArrowRight") step(1); if (e.key === "ArrowLeft") step(-1); if (e.key === "Escape") $("#lightbox").hidden = true; return; }
-    if (e.key === "Escape") { for (const id of ["layersPanel", "planPanel", "about"]) document.getElementById(id).hidden = true; syncNav(); }
+    if (e.key === "Escape") { closeGuide(); for (const id of ["layersPanel", "planPanel", "about"]) document.getElementById(id).hidden = true; syncNav(); }
     if (e.key === " " && e.target === document.body) { e.preventDefault(); eva.playing ? pause() : play(); }
   });
 

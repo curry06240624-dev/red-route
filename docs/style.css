@@ -45,6 +45,30 @@ hr.r { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
   font: 600 12px var(--cond); letter-spacing: .14em; color: var(--muted); }
 .topnav button:first-child { border-left: 0; }
 .topnav button:hover, .topnav button.on { color: var(--text); background: rgba(255,255,255,.06); }
+.topnav .help { font: 700 15px Barlow; padding: 9px 15px; }
+
+/* first-visit guide: three numbered steps that point at the real controls */
+.guide { left: 50%; top: 50%; transform: translate(-50%, -58%); width: min(440px, calc(100vw - 32px)); padding: 18px 20px 16px;
+  z-index: 1500; background: rgba(9,10,12,.95); box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.guide[hidden] { display: none; }
+.guide-lead { margin: 0 0 10px; font-size: 14px; color: #d9dcdf; }
+.guide-steps { list-style: none; margin: 0; padding: 0; }
+.guide-steps li { display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line-2); }
+.guide-steps b { display: block; font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 2px; }
+.guide-steps small { display: block; font-size: 13px; color: var(--muted); }
+.gn, .gnum { width: 24px; height: 24px; border-radius: 50%; background: var(--route); color: #fff; font: 700 13px/1 Barlow;
+  display: inline-grid; place-items: center; letter-spacing: 0; }
+.gnum { display: none; margin-right: 8px; vertical-align: middle; animation: gpulse 1.6s ease-out infinite; }
+body.guide-on .gnum { display: inline-grid; }
+body.guide-on #left { box-shadow: 0 0 0 2px var(--route); }
+body.guide-on .topnav button[data-open="planPanel"] { box-shadow: inset 0 0 0 2px var(--route); color: var(--text); }
+@keyframes gpulse { 0% { box-shadow: 0 0 0 0 rgba(255,106,61,.75); } 100% { box-shadow: 0 0 0 10px rgba(255,106,61,0); } }
+.guide-bar { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+.cta { display: inline-flex; align-items: center; gap: 10px; background: var(--route); border: 0; color: #fff; padding: 10px 16px;
+  font: 600 12px var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.cta:hover { background: #ff7f57; }
+.cta .tri { width: 0; height: 0; border-left: 10px solid #fff; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.guide-bar .ghost { padding: 10px 14px; }
 
 /* left panel */
 .left { top: 88px; left: 14px; width: 320px; max-height: calc(100vh - 88px - 168px); overflow-y: auto; padding: 14px 16px; }
@@ -124,10 +148,13 @@ hr.r { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 
 /* timeline */
 .timeline { left: 14px; right: 14px; bottom: 14px; height: 138px; display: flex; align-items: stretch; }
-.play { flex: none; width: 54px; border: 0; border-right: 1px solid var(--line); background: none; display: grid; place-items: center; }
-.play .tri { width: 0; height: 0; border-left: 13px solid var(--text); border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin-left: 3px; }
-.play .sq { width: 13px; height: 13px; background: var(--text); }
-.play:hover { background: rgba(255,255,255,.05); }
+.play { position: relative; flex: none; width: 104px; border: 0; background: var(--route); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }
+.play .tri { width: 0; height: 0; border-left: 15px solid #fff; border-top: 9px solid transparent; border-bottom: 9px solid transparent; margin-left: 3px; }
+.play .sq { width: 14px; height: 14px; background: #fff; }
+.play .pl { font: 600 11px/1.2 var(--cond); letter-spacing: .14em; text-transform: uppercase; text-align: center; padding: 0 6px; }
+.play:hover { background: #ff7f57; }
+.play .gnum { position: absolute; top: -12px; left: -12px; margin: 0; }
 .tl-wrap { position: relative; flex: 1; min-width: 0; }
 #tlSvg { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: none; }
 .tl-tip { position: absolute; top: 4px; pointer-events: none; background: rgba(9,10,12,.95); border: 1px solid var(--line);
@@ -179,6 +206,8 @@ hr.r { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
   .topnav { position: absolute; top: 72px; left: 8px; right: auto; margin: 0; }
   .topnav button { padding: 8px 10px; font-size: 11px; }
   .timeline { position: static; height: 120px; }
+  .play { width: 78px; }
+  .topnav .help { padding: 6px 12px; }
   .legend { display: none; }
   .live { position: absolute; top: auto; bottom: calc(42vh + 8px); left: 8px; right: 8px; flex-wrap: wrap; }
   .drawer { position: fixed; top: auto; bottom: 0; left: 0; right: 0; max-height: 70vh; margin: 0; }
