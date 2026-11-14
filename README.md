@@ -1,6 +1,6 @@
 # Red Route: a Marswalk planner for Jezero Crater
 
-NASA Space Apps Challenge 2026 · Challenge: **Interplanetary Survival Guide: Martian Map** · Team **Red Route** (Taipei)
+NASA Space Apps Challenge 2026 · Challenge: **Interplanetary Survival Guide: Martian Map** · Team **Red Route** (Kaohsiung)
 
 Red Route is a map an astronaut crew could use to plan and run a walking EVA (a "Marswalk") in Jezero Crater.
 It layers NASA terrain, imagery, rover photos, weather and space weather into one view. It then finds the
