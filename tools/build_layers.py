@@ -33,6 +33,7 @@ OUT = os.path.join(ROOT, "docs", "data")
 AOI = dict(lon0=77.372, lon1=77.456, lat0=18.444, lat1=18.480)
 
 # Stops sit on Perseverance waypoints (lat/lon from NASA's waypoint file), picked by sol.
+# "role" is the science goal of the stop; the app shows it in the stop panel under "Why go here".
 STOPS = [
     dict(id="base", name="Base camp (upper fan)", sol=715, dwell_min=0,
          role="Flat ground on top of the delta where Perseverance stopped on sol 715."),

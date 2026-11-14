@@ -253,6 +253,8 @@
     const awayM = s.rover_lat != null ? map.distance([s.lat, s.lon], [s.rover_lat, s.rover_lon]) * (R_MARS / 6378137) : 0;
     let html = `<div class="lbl">Selected stop</div>
       <div class="stop-title"><span class="n">${numberOf(s.id)}</span><h2>${esc(s.name)}</h2></div>`;
+    // the science goal of the stop (base camp has its own note further down); hidden once the stop is moved elsewhere
+    if (s.id !== "base" && s.role && !s.moved) html += `<div class="why"><div class="lbl">Why go here</div><p>${esc(s.role)}</p></div>`;
     if (photos.length) {
       html += `<div class="grid6">${photos.slice(0, 6).map((p, k) => `<button data-k="${k}" aria-label="Open photo ${k + 1}"><img src="${p.thumb || p.small || p.medium}" alt="${esc(p.cam)} view near ${esc(s.name)}"></button>`).join("")}</div>
         <button class="more" id="allPhotos">View all ${photos.length} rover photos</button>

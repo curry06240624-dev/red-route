@@ -115,6 +115,8 @@ body.guide-on .topnav button[data-open="planPanel"] { box-shadow: inset 0 0 0 2p
 .src { font-size: 11.5px; color: var(--dim); }
 .src a { color: var(--muted); }
 .drag-hint { font-size: 11.5px; color: var(--dim); margin-top: 10px; }
+.why { margin: 2px 0 12px; padding-left: 10px; border-left: 2px solid var(--route); }
+.why p { margin: 3px 0 0; font-size: 14px; line-height: 1.4; color: var(--text); }
 
 /* live readout while the EVA clock runs */
 .live { top: 88px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 770px); display: flex; flex-wrap: wrap; justify-content: center; }
