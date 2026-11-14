@@ -36,19 +36,20 @@
       { maxNativeZoom: 7, maxZoom: 19, attribution: `${credit} · MOLA (NASA/GSFC)` }) },
   };
   // zoomed-out context under everything: ESA Mars Express HRSC blended with NASA MOLA
-  L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19 }).addTo(map);
+  L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, className: "ctx-relief" }).addTo(map);
   let baseKey = "hirise";
   BASES.hirise.layer.addTo(map);
 
   const S = { m: null, base: null, overlays: {}, markers: {}, sel: "top", donki: null, meda: null, routeLine: null, routeCasing: null };
   window.RedRoute = { map, S };
 
+  const getJSON = (f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.json());   // always check for a newer build
   Promise.all([
-    fetch("data/mission.json").then((r) => r.json()),
-    fetch("data/route.geojson").then((r) => r.json()),
-    fetch("data/m20_traverse.json").then((r) => r.json()).catch(() => null),
-    fetch("data/donki.json").then((r) => r.json()).catch(() => null),
-    fetch("data/meda.json").then((r) => r.json()).catch(() => null),
+    getJSON("mission.json"),
+    getJSON("route.geojson"),
+    getJSON("m20_traverse.json").catch(() => null),
+    getJSON("donki.json").catch(() => null),
+    getJSON("meda.json").catch(() => null),
   ]).then(([mission, route, traverse, donki, meda]) => {
     S.m = mission; S.base = clone(mission); S.donki = donki; S.meda = meda; S.route = route;
     buildOverlays(mission, traverse);
@@ -635,9 +636,9 @@
 
   function initWorker(m) {
     if (!m.grid || !window.Worker) return;
-    Promise.all(["grid_slope.u8", "grid_rough.u8", "grid_dem.i16"].map((f) => fetch(`data/${f}`).then((r) => r.arrayBuffer())))
+    Promise.all(["grid_slope.u8", "grid_rough.u8", "grid_dem.i16"].map((f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.arrayBuffer())))
       .then(([slope, rough, dem]) => {
-        worker = new Worker("router.js");
+        worker = new Worker("router.js?v=3");
         worker.onmessage = onWorker;
         worker.postMessage({ type: "init", grid: m.grid, slope, rough, dem }, [slope, rough, dem]);
       }).catch(() => {});

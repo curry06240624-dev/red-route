@@ -19,6 +19,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 a { color: #ffb08f; }
 #map { position: fixed; inset: 0; background: #1b1310; }
 .leaflet-container { font: inherit; background: #1b1310; }
+.ctx-relief { filter: grayscale(1) sepia(.45) brightness(.7) contrast(1.15); }   /* ESA/NASA relief under HiRISE, without the elevation colours */
 .leaflet-control-attribution { background: rgba(9,10,12,.7) !important; color: var(--dim) !important; font-size: 10.5px; }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 .leaflet-bottom.leaflet-right { bottom: 150px; }
