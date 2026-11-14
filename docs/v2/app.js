@@ -63,7 +63,7 @@
     refreshDonki();
   }).catch((e) => { console.error(e); $("#checks").innerHTML = '<div class="bad">Could not load the mission data.</div>'; });
 
-  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) renderAstroTrack(); }
+  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } }
 
   function fitRoute() {
     const b = S.routeLine.getBounds();
@@ -611,9 +611,79 @@
   /* ---------- v2: Astronaut view, the crew's own screen ----------
      One status word, two big numbers and an arrow, readable at a glance; buttons sized for gloves.
      Driven by the same EVA clock as the map, so it shows exactly what the plan predicts. */
-  const astro = { open: false };
+  const astro = { open: false, legEnd: [] };
   function astroEnd() { const tl = S.m.timeline || []; return tl.length ? tl[tl.length - 1].arrive_min : S.m.profile[S.m.profile.length - 1].t; }
+
+  // The route between two distances along the walk (metres), for the "your way" line on the small map.
+  function routeSlice(d0, d1) {
+    const toRad = Math.PI / 180, out = [];
+    let acc = 0, prev = null;
+    for (const layer of S.routeLine.getLayers()) for (const ll of layer.getLatLngs()) {
+      if (prev) {
+        const dy = (ll.lat - prev.lat) * toRad * R_MARS, dx = (ll.lng - prev.lng) * toRad * R_MARS * Math.cos(ll.lat * toRad);
+        const seg = Math.hypot(dx, dy), a = acc, b = acc + seg;
+        if (seg > 0 && b >= d0 && a <= d1) {
+          const f0 = Math.max(0, (d0 - a) / seg), f1 = Math.min(1, (d1 - a) / seg);
+          if (!out.length) out.push([prev.lat + (ll.lat - prev.lat) * f0, prev.lng + (ll.lng - prev.lng) * f0]);
+          out.push([prev.lat + (ll.lat - prev.lat) * f1, prev.lng + (ll.lng - prev.lng) * f1]);
+        }
+        acc = b;
+        if (acc > d1) return out;
+      }
+      prev = ll;
+    }
+    return out;
+  }
+
+  /* small moving map in the astronaut view: north up, follows the crew, shows the route ahead and the steep ground */
+  const amap = { map: null, lastPan: 0 };
+  function initAstroMap() {
+    if (amap.map) { amap.map.invalidateSize(); return; }
+    amap.map = L.map("aMap", { crs: L.CRS.EPSG4326, zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, zoomSnap: 0.5 });
+    L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, className: "ctx-relief" }).addTo(amap.map);
+    L.tileLayer(trekUrl("JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd", "png"), { maxNativeZoom: 17, maxZoom: 19, bounds: JEZ_HIRISE }).addTo(amap.map);
+    L.imageOverlay("data/slope.png", S.m.overlay_bounds, { interactive: false }).addTo(amap.map);
+    const b = stopById("base");
+    amap.map.setView([b.lat, b.lon], 15.5);
+    amap.map.on("zoomend moveend", astroScale);
+  }
+  function drawAstroRoute() {
+    if (!amap.map) return;
+    for (const k of ["casing", "route"]) if (amap[k]) amap.map.removeLayer(amap[k]);
+    (amap.stops || []).forEach((l) => amap.map.removeLayer(l));
+    const gj = S.routeLine.toGeoJSON();
+    amap.casing = L.geoJSON(gj, { style: { color: "#0b0b0b", weight: 11, opacity: 0.7 }, interactive: false }).addTo(amap.map);
+    amap.route = L.geoJSON(gj, { style: { color: "#ff6a3d", weight: 5 }, interactive: false }).addTo(amap.map);
+    amap.stops = S.m.order.slice(0, -1).map((id) => { const s = stopById(id); return L.marker([s.lat, s.lon], { icon: markerIcon(s), interactive: false, keyboard: false }).addTo(amap.map); });
+    if (amap.ahead) amap.ahead.bringToFront();
+    if (amap.crew) amap.crew.bringToFront();
+  }
+  function updateAstroMap(pos, aheadPts) {
+    if (!amap.map) return;
+    if (!amap.crew) {
+      amap.ahead = L.polyline([], { color: "#ffffff", weight: 7, opacity: 0.95, lineCap: "round", interactive: false }).addTo(amap.map);
+      amap.crew = L.circleMarker(pos, { radius: 10, color: "#fff", weight: 3, fillColor: "#38bdf8", fillOpacity: 1, interactive: false }).addTo(amap.map);
+    }
+    amap.ahead.setLatLngs(aheadPts && aheadPts.length > 1 ? aheadPts : []).bringToFront();
+    amap.crew.setLatLng(pos).bringToFront();
+    const now = performance.now();
+    if (now - amap.lastPan > 100) { amap.map.setView(pos, amap.map.getZoom(), { animate: false }); amap.lastPan = now; }
+  }
+  function astroScale() {
+    if (!amap.map) return;
+    const c = amap.map.getCenter(), a = amap.map.latLngToContainerPoint(c), b = amap.map.latLngToContainerPoint([c.lat, c.lng + 0.01]);
+    const mPerPx = (((Math.PI * R_MARS) / 180) * Math.cos((c.lat * Math.PI) / 180) * 0.01) / Math.max(1e-6, Math.abs(b.x - a.x));
+    const len = [50, 100, 200, 500, 1000].find((x) => x / mPerPx >= 70) || 1000;
+    $("#aScaleBar").style.width = `${Math.round(len / mPerPx)}px`;
+    $("#aScaleTxt").textContent = len >= 1000 ? `${len / 1000} km` : `${len} m`;
+  }
+  $("#aZin").onclick = () => amap.map && amap.map.setZoom(Math.min(18, amap.map.getZoom() + 0.5));
+  $("#aZout").onclick = () => amap.map && amap.map.setZoom(Math.max(13, amap.map.getZoom() - 0.5));
+
   function renderAstroTrack() {
+    astro.legEnd = [];
+    for (const p of S.m.profile) astro.legEnd[p.leg] = p.d;   // distance along the walk where each leg ends
     const tl = S.m.timeline || [], end = astroEnd();
     const pct = (t) => Math.max(0, Math.min(100, (t / end) * 100));
     let h = '<div class="trk-line"></div><div class="trk-done" id="aDone"></div>';
@@ -633,8 +703,12 @@
     $("#astro").hidden = false;
     document.body.classList.add("astro-on");
     renderAstroTrack();
+    initAstroMap();
+    drawAstroRoute();
     setTime(eva.T || 0);
-    $("#aPlay").focus();
+    astroScale();
+    $("#astro").scrollTop = 0;
+    $("#aPlay").focus({ preventScroll: true });   // keep the status word in view on phones
   }
   function closeAstro() {
     astro.open = false;
@@ -663,25 +737,30 @@
     $("#aO2").style.width = `${Math.min(100, (back / lim) * 100)}%`;
     $("#aO2bar").className = `o2bar ${back > lim ? "bad" : back > lim * 0.8 ? "warn" : ""}`;
     $("#aO2txt").textContent = back > lim ? `Beyond the ${lim} min of backup oxygen` : `Inside the ${lim} min of backup oxygen`;
-    // where to go next
+    // where to go next: along the planned route, never a straight line (a straight line can cross no-go slopes)
     const arrow = $("#aArrow");
+    $("#aSite").textContent = "";
+    let aheadPts = null;
     if (st.after) {
       $("#aNextLbl").textContent = "Status"; $("#aNext").textContent = "BASE CAMP"; $("#aNextSub").textContent = "Crew is back inside";
       arrow.style.display = "none";
-    } else if (here) {
-      const tl = (m.timeline || [])[st.q.leg];
-      $("#aNextLbl").textContent = "On site";
-      $("#aNext").textContent = shortName(here).toUpperCase();
-      $("#aNextSub").textContent = tl ? `Leave by T+${hm(tl.leave_by_min)}` : "";
-      arrow.style.display = "none";
     } else {
-      const brg = bearing(pos, [nextS.lat, nextS.lon]);
+      const leg = st.gap ? st.q.leg : st.p.leg;
+      if (here) {
+        const tl = (m.timeline || [])[st.q.leg];
+        if (tl) $("#aSite").textContent = `At ${shortName(here)}: leave by T+${hm(tl.leave_by_min)}`;
+      }
+      const legEnd = astro.legEnd[leg] ?? st.d, along = Math.max(0, legEnd - st.d);
+      aheadPts = routeSlice(st.d, Math.min(legEnd, st.d + 120));
+      const tgt = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 60)) : [nextS.lat, nextS.lon];
+      const brg = bearing(pos, tgt);
       $("#aNextLbl").textContent = nextS.id === "base" ? "Heading home" : "Next stop";
       $("#aNext").textContent = shortName(nextS).toUpperCase();
-      $("#aNextSub").textContent = `${dist >= 1000 ? `${(dist / 1000).toFixed(2)} km` : `${Math.round(dist)} m`} · ${compass(brg)} · ground slope ${Math.round(st.p.s)}°`;
+      $("#aNextSub").textContent = `${along >= 1000 ? `${(along / 1000).toFixed(2)} km` : `${Math.round(along)} m`} along the route · ${compass(brg)}`;
       arrow.style.display = "";
       arrow.style.transform = `rotate(${brg}deg)`;
     }
+    updateAstroMap(pos, aheadPts);
     const p = `${Math.max(0, Math.min(100, (T / astroEnd()) * 100))}%`;
     const crew = $("#aCrew"), done = $("#aDone");
     if (crew) crew.style.left = p;

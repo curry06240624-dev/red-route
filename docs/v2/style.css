@@ -280,3 +280,38 @@ body.astro-on { overflow: hidden; }
   .astro-ctl { flex-direction: column; align-items: stretch; }
   .astro-open { width: 84px; }
 }
+
+/* v2: astronaut view with the small moving route map (map on the right, numbers on the left) */
+.astro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "top top" "status map" "tiles map" "track track" "ctl ctl"; column-gap: 18px; row-gap: 16px; }
+.astro-top { grid-area: top; }
+.astro-status { grid-area: status; }
+.astro-mapwrap { grid-area: map; }
+.astro-grid { grid-area: tiles; align-content: start; }
+.astro-track { grid-area: track; }
+.astro-ctl { grid-area: ctl; margin-top: 0; }
+.astro-word { font-size: clamp(56px, 8vw, 128px); }
+.astro-site { margin-top: 8px; font: 600 clamp(17px, 1.8vw, 24px) var(--cond); letter-spacing: .02em; }
+.astro-site:empty { display: none; }
+.astro-next b { font-size: clamp(30px, 3.4vw, 56px); }
+.astro-mapwrap { position: relative; min-height: 360px; border: 1px solid var(--line); background: #1b1310; overflow: hidden; }
+#aMap { position: absolute; inset: 0; background: #1b1310; }
+.amap-n { position: absolute; top: 10px; left: 12px; z-index: 500; font: 700 15px/1 var(--cond); color: #fff; text-align: center; text-shadow: 0 1px 3px #000; }
+.amap-n::before { content: ""; display: block; width: 0; height: 0; margin: 0 auto 3px; border-left: 7px solid transparent;
+  border-right: 7px solid transparent; border-bottom: 12px solid #fff; }
+.amap-zoom { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; flex-direction: column; gap: 8px; }
+.amap-zoom button { width: 52px; height: 52px; background: rgba(5,6,7,.82); border: 1px solid rgba(255,255,255,.45); color: #fff; font: 600 26px/1 Barlow; }
+.amap-zoom button:hover { background: rgba(40,40,40,.9); }
+.amap-scale { position: absolute; left: 12px; bottom: 12px; z-index: 500; font: 600 12px var(--cond); letter-spacing: .1em; color: #fff; text-shadow: 0 1px 3px #000; }
+.amap-scale i { display: block; height: 7px; margin-bottom: 3px; border: 2px solid #fff; border-top: 0; }
+.amap-key { position: absolute; right: 10px; bottom: 26px; z-index: 500; display: flex; gap: 14px; padding: 6px 10px; background: rgba(5,6,7,.75);
+  font: 600 12px var(--cond); letter-spacing: .1em; text-transform: uppercase; }
+.amap-key span { display: flex; align-items: center; gap: 7px; }
+.amap-key i { display: inline-block; width: 18px; height: 6px; }
+.amap-key .k-way { background: #fff; }
+.amap-key .k-steep { height: 10px; background: #dc2626; }
+.amap-credit { position: absolute; right: 10px; bottom: 6px; z-index: 500; font-size: 10.5px; color: rgba(255,255,255,.72); text-shadow: 0 1px 2px #000; }
+@media (max-width: 900px) {
+  .astro { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "top" "status" "map" "tiles" "track" "ctl"; }
+  .astro-mapwrap { min-height: 300px; }
+}

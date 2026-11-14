@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="v2/style.css?v=1">
+<link rel="stylesheet" href="v2/style.css?v=2">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
@@ -74,7 +74,16 @@
   <section class="astro-status" id="aStatus">
     <div class="astro-word" id="aWord">GO</div>
     <div class="astro-sub" id="aSpare"></div>
+    <div class="astro-site" id="aSite"></div>
     <div class="astro-sub2" id="aBad"></div>
+  </section>
+  <section class="astro-mapwrap" aria-label="Route map around the crew, north up">
+    <div id="aMap"></div>
+    <div class="amap-n" aria-hidden="true">N</div>
+    <div class="amap-zoom"><button id="aZin" aria-label="Zoom in">+</button><button id="aZout" aria-label="Zoom out">&minus;</button></div>
+    <div class="amap-scale"><i id="aScaleBar"></i><span id="aScaleTxt"></span></div>
+    <div class="amap-key"><span><i class="k-way"></i>Your way</span><span><i class="k-steep"></i>Too steep</span></div>
+    <div class="amap-credit">HiRISE: NASA/JPL/UArizona, via Mars Trek</div>
   </section>
   <section class="astro-grid">
     <div class="astro-tile"><span class="lbl">Walk home</span><b id="aBack">0 MIN</b>
@@ -105,6 +114,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="v2/app.js?v=1"></script>
+<script src="v2/app.js?v=3"></script>
 </body>
 </html>
