@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Route · Marswalk planner</title>
+<meta name="description" content="Plan a safe Marswalk in Jezero Crater with NASA data: HiRISE terrain, Perseverance photos, MEDA weather and DONKI space weather.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#7a2614"/><path d="M5 21c5-1 6-7 11-7s6 5 11 3" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="2 3" stroke-linecap="round"/><circle cx="5" cy="21" r="2.2" fill="#ff7a4d"/><circle cx="27" cy="17" r="2.2" fill="#ff7a4d"/></svg>
+    <div><b>RED ROUTE</b><span class="sub">Marswalk planner · Jezero Crater, Mars</span></div>
+  </div>
+  <div class="pill" id="statusPill">Loading mission…</div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="plan" class="on">Plan</button>
+    <button role="tab" data-view="about">How it works</button>
+  </nav>
+</header>
+
+<main class="layout">
+  <aside class="panel" id="panel">
+    <div id="viewPlan">
+      <section class="card" id="summary"></section>
+      <section class="card" id="conditions"></section>
+      <section id="stops"></section>
+      <section class="card" id="layers"></section>
+    </div>
+    <div id="viewAbout" hidden></div>
+  </aside>
+
+  <div class="mapwrap">
+    <div id="map" aria-label="Map of Jezero Crater"></div>
+    <div class="legend" id="legend"></div>
+    <div class="profile" id="profile">
+      <div class="profile-head"><b>Elevation along the route</b><span id="profileHint">Hover to follow the route</span></div>
+      <svg id="profileSvg" preserveAspectRatio="none"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+  </div>
+</main>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-close" id="lbClose" aria-label="Close">&times;</button>
+  <figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
