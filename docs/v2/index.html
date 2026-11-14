@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="v2/style.css?v=2">
+<link rel="stylesheet" href="v2/style.css?v=4">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
@@ -77,9 +77,9 @@
     <div class="astro-site" id="aSite"></div>
     <div class="astro-sub2" id="aBad"></div>
   </section>
-  <section class="astro-mapwrap" aria-label="Route map around the crew, north up">
+  <section class="astro-mapwrap" id="aMapWrap" aria-label="Route map around the crew; it turns so the walking direction is up">
     <div id="aMap"></div>
-    <div class="amap-n" aria-hidden="true">N</div>
+    <button class="amap-n" id="aNorth" aria-label="North arrow. Tap to switch between a turning map and north up" title="Tap: turning map / north up">N</button>
     <div class="amap-zoom"><button id="aZin" aria-label="Zoom in">+</button><button id="aZout" aria-label="Zoom out">&minus;</button></div>
     <div class="amap-scale"><i id="aScaleBar"></i><span id="aScaleTxt"></span></div>
     <div class="amap-key"><span><i class="k-way"></i>Your way</span><span><i class="k-steep"></i>Too steep</span></div>
@@ -114,6 +114,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="v2/app.js?v=3"></script>
+<script src="v2/app.js?v=4"></script>
 </body>
 </html>

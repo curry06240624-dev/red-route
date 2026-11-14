@@ -315,3 +315,12 @@ body.astro-on { overflow: hidden; }
   .astro { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "top" "status" "map" "tiles" "track" "ctl"; }
   .astro-mapwrap { min-height: 300px; }
 }
+
+/* v2: the astronaut map turns so the walking direction is up (like car navigation).
+   #aMap is a square as big as the frame's diagonal, rotated around the crew; stop labels turn back upright. */
+#aMap { inset: auto; left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); transform-origin: 50% 50%; }
+#aMap .mk-wrap { transform: rotate(var(--hdg, 0deg)); }
+.amap-n { width: 46px; height: 54px; padding: 4px 0 0; border: 1px solid rgba(255,255,255,.35); background: rgba(5,6,7,.75); cursor: pointer;
+  transform-origin: 50% 50%; }
+.amap-n.fixed { border-color: var(--route); }
+.astro-tile .astro-next b { white-space: normal; overflow: visible; text-overflow: clip; font-size: clamp(26px, 2.6vw, 44px); line-height: 1.02; }

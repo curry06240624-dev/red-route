@@ -635,9 +635,32 @@
     return out;
   }
 
-  /* small moving map in the astronaut view: north up, follows the crew, shows the route ahead and the steep ground */
-  const amap = { map: null, lastPan: 0 };
+  /* small moving map in the astronaut view: follows the crew and turns so the walking direction is up
+     (like car navigation; tap the N button for north up). Shows the route ahead and the steep ground. */
+  const amap = { map: null, lastPan: 0, hdg: null, northUp: false };
+  // The map element is a square as big as the frame's diagonal, so turning it never shows empty corners.
+  function sizeAstroMap() {
+    const wrap = $("#aMapWrap"), el = $("#aMap");
+    const d = Math.ceil(Math.hypot(wrap.clientWidth, wrap.clientHeight));
+    el.style.width = `${d}px`; el.style.height = `${d}px`;
+    if (amap.map) amap.map.invalidateSize();
+  }
+  // Turn the map toward the walking direction. Smooth while the clock plays, jump when scrubbing.
+  function steerAstroMap(target) {
+    if (target == null || !isFinite(target)) target = amap.hdg ?? 0;
+    if (amap.hdg == null || !eva.playing) amap.hdg = target;
+    else { const diff = ((target - amap.hdg + 540) % 360) - 180; amap.hdg = (amap.hdg + diff * 0.12 + 360) % 360; }
+    const rot = amap.northUp ? 0 : amap.hdg, el = $("#aMap");
+    el.style.transform = `translate(-50%, -50%) rotate(${-rot}deg)`;
+    el.style.setProperty("--hdg", `${rot}deg`);
+    $("#aNorth").style.transform = `rotate(${-rot}deg)`;
+    $("#aNorth").classList.toggle("fixed", amap.northUp);
+    return rot;
+  }
+  $("#aNorth").onclick = () => { amap.northUp = !amap.northUp; steerAstroMap(amap.hdg); if (astro.open) setTime(eva.T); };
+  window.addEventListener("resize", () => { if (astro.open) sizeAstroMap(); });
   function initAstroMap() {
+    sizeAstroMap();
     if (amap.map) { amap.map.invalidateSize(); return; }
     amap.map = L.map("aMap", { crs: L.CRS.EPSG4326, zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, zoomSnap: 0.5 });
@@ -744,6 +767,7 @@
     if (st.after) {
       $("#aNextLbl").textContent = "Status"; $("#aNext").textContent = "BASE CAMP"; $("#aNextSub").textContent = "Crew is back inside";
       arrow.style.display = "none";
+      steerAstroMap(null);
     } else {
       const leg = st.gap ? st.q.leg : st.p.leg;
       if (here) {
@@ -754,11 +778,14 @@
       aheadPts = routeSlice(st.d, Math.min(legEnd, st.d + 120));
       const tgt = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 60)) : [nextS.lat, nextS.lon];
       const brg = bearing(pos, tgt);
+      // walking direction = the route over the next 25 m; the map turns so this points up
+      const near = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 25)) : tgt;
+      const rot = steerAstroMap(bearing(pos, near));
       $("#aNextLbl").textContent = nextS.id === "base" ? "Heading home" : "Next stop";
       $("#aNext").textContent = shortName(nextS).toUpperCase();
       $("#aNextSub").textContent = `${along >= 1000 ? `${(along / 1000).toFixed(2)} km` : `${Math.round(along)} m`} along the route · ${compass(brg)}`;
       arrow.style.display = "";
-      arrow.style.transform = `rotate(${brg}deg)`;
+      arrow.style.transform = `rotate(${brg - rot}deg)`;   // relative to the map: up = straight ahead, leans before a bend
     }
     updateAstroMap(pos, aheadPts);
     const p = `${Math.max(0, Math.min(100, (T / astroEnd()) * 100))}%`;
