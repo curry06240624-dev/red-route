@@ -90,7 +90,7 @@
     const w = wb.worst;
     out.push({ key: "plan", name: "Plan fits", ok: w.margin_min >= 0,
       val: `${w.margin_min >= 0 ? "PASS" : "FAIL"} ${sgn(w.margin_min)}${fmtMin(w.margin_min)}`,
-      sub: w.margin_min >= 0 ? `Home at normal pace inside the usable ${hm(wb.budget_min)} (8 h minus ${Math.round(wb.reserve * 100)} % reserve)`
+      sub: w.margin_min >= 0 ? `Home at normal pace inside the usable ${hm(wb.budget_min)} (${wb.eva_limit_h} h minus ${Math.round(wb.reserve * 100)} % reserve)`
         : `Over by ${fmtMin(w.margin_min)} near ${nearestStopName(w.lat, w.lon)} at T+${hm(w.t)}. Leave earlier, shorten a stop or drop one.` });
     if (wb.bad) {
       const b = wb.bad.worst;
@@ -140,16 +140,38 @@
   }
 
   /* ---------- conditions: space weather + daylight ---------- */
+  // NASA's CME notices list their targets in the "Message Type: ... CME (targets)" line and give a predicted
+  // arrival time for each target. Every notice also carries the office name "Moon to Mars Space Weather
+  // Analysis Office", so the word Mars on its own means nothing.
+  function marsCme(n) {
+    if (n.type !== "CME") return null;
+    const body = n.body || "", head = /Message Type:[^\n]*\(([^)]*)\)/.exec(body);
+    if (!head || !/\bMars\b/.test(head[1])) return null;
+    const at = /\bMars at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z)/.exec(body), pm = /\(plus minus (\d+) hours\)/.exec(body);
+    const how = /\bMars \(([^)]+)\)/.exec(body);
+    const issued = Date.parse(n.issued), arrive = at ? Date.parse(at[1]) : null, pmH = pm ? +pm[1] : 7;
+    // watch from the notice until a day after the latest predicted arrival (72 h from the notice if it gives no time)
+    const until = arrive != null && !isNaN(arrive) ? arrive + (pmH + 24) * 3600e3 : issued + 72 * 3600e3;
+    return { n, issued, arrive: isNaN(arrive) ? null : arrive, pmH, how: how ? how[1] : "", until };
+  }
+  const utcShort = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`; };
+
   // "now" is the time the notices describe: the present for live data, the save date for the saved copy
   function spaceWeather(notes, now = Date.now()) {
-    const within = (n, h) => now - Date.parse(n.issued) < h * 3600e3;
+    const newest = (list) => list.slice().sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued))[0];
+    const within = (n, h) => { const t = Date.parse(n.issued); return t <= now && now - t < h * 3600e3; };
     const sep = notes.filter((n) => n.type === "SEP" && within(n, 72));
-    if (sep.length) return { cls: "bad", word: "SHELTER", sub: "Solar particle alert in the last 72 h (measured near Earth). Stay in the habitat.", n: sep[0] };
-    const cme = notes.filter((n) => n.type === "CME" && /Mars/.test(n.body || "") && within(n, 72));
+    if (sep.length) return { cls: "bad", word: "SHELTER", sub: "Solar particle alert in the last 72 h (measured near Earth). Stay in the habitat.", n: newest(sep) };
+    const cmes = notes.map(marsCme).filter((c) => c && c.issued <= now && now <= c.until).sort((a, b) => b.issued - a.issued);
+    if (cmes.length) {
+      const c = cmes[0];
+      const when = c.arrive != null ? ` around ${utcShort(c.arrive)} (±${c.pmH} h${c.how ? `, ${c.how}` : ""})` : "";
+      return { cls: "warn", word: "WATCH", n: c.n,
+        sub: `NASA's model ${c.arrive != null && c.arrive < now ? "predicted" : "predicts"} a solar eruption (CME) reaching Mars${when}. Keep the EVA short and close to shelter.` };
+    }
     const xfl = notes.filter((n) => n.type === "FLR" && /\bX\d/.test(n.body || "") && within(n, 72));
-    if (cme.length || xfl.length) return { cls: "warn", word: "WATCH", sub: cme.length ? "A solar eruption (CME) is predicted to reach Mars. Keep the EVA short and close to shelter." : "X-class solar flare in the last 72 h.", n: (cme[0] || xfl[0]) };
-    const marsCme = notes.filter((n) => n.type === "CME" && /Mars/.test(n.body || ""));
-    return { cls: "ok", word: "CLEAR", sub: "No particle alerts or Mars-bound eruptions in the last 72 h.", n: marsCme[0] || notes[0] };
+    if (xfl.length) return { cls: "warn", word: "WATCH", sub: "X-class solar flare in the last 72 h.", n: newest(xfl) };
+    return { cls: "ok", word: "CLEAR", sub: "No solar particle alert in the last 72 h and no eruption (CME) predicted at Mars now.", n: newest(notes) };
   }
 
   function renderConditions() {
@@ -158,8 +180,9 @@
       const live = !!S.donki.live, saved = S.donki.fetched || "an earlier date";
       const ref = live ? Date.now() : (Date.parse(`${S.donki.fetched}T23:59:59+08:00`) || Date.now());
       const v = spaceWeather(S.donki.notes, ref);
-      const src = live ? "Live NASA DONKI notices" : `Saved NASA DONKI notices from ${saved}; the live feed is busy`;
-      html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${live ? "" : `As of ${esc(saved)}: `}${esc(v.sub)} ${src}${v.n ? ` · <a href="${esc(v.n.url)}" target="_blank" rel="noopener">latest notice</a>` : ""}.</span></div>`;
+      const src = live ? "Live NASA DONKI notices" : `Saved NASA DONKI notices from ${saved}; the live feed did not answer`;
+      const link = v.n && /^https:\/\//.test(v.n.url || "") ? v.n.url : "";
+      html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${live ? "" : `As of ${esc(saved)}: `}${esc(v.sub)} ${src}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${v.cls === "ok" ? "latest notice" : "the notice"}</a>` : ""}.</span></div>`;
     }
     if (S.meda && S.meda.sols && S.meda.sols.length) {
       const w = S.meda.sols[S.meda.sols.length - 1];
@@ -180,11 +203,15 @@
 
   function refreshDonki() {
     const end = new Date(), start = new Date(end - 30 * 864e5), d = (x) => x.toISOString().slice(0, 10);
-    fetch(`https://api.nasa.gov/DONKI/notifications?startDate=${d(start)}&endDate=${d(end)}&type=all&api_key=DEMO_KEY`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    const q = `startDate=${d(start)}&endDate=${d(end)}&type=all`;
+    const get = (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+    // NASA's CCMC serves the notices without a key; api.nasa.gov (demo key, rate-limited) is the second try
+    get(`https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?${q}`)
+      .catch(() => get(`https://api.nasa.gov/DONKI/notifications?${q}&api_key=DEMO_KEY`))
       .then((notes) => {
+        if (!Array.isArray(notes)) return;
         S.donki = { live: true, fetched: d(end),
-          notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 1500) })) };
+          notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 8000) })) };
         renderConditions();
       })
       .catch(() => {});
@@ -321,6 +348,7 @@
       mk.on("click", () => selectStop(s.id, false));
       mk.on("dragend", () => {
         const ll = mk.getLatLng(), st = stopById(s.id);
+        S.undo = { id: s.id, lat: st.lat, lon: st.lon, moved: !!st.moved };   // where to put it back if no route is found
         st.lat = ll.lat; st.lon = ll.lng; st.moved = true;
         S.sel = s.id; replan();
       });
@@ -348,7 +376,7 @@
     for (let h = 0; h <= Tmax / 60; h++) {
       const x = X(h * 60);
       g += `<line x1="${x}" x2="${x}" y1="${TL.axisY - 4}" y2="${TL.axisY + 4}" stroke="rgba(255,255,255,.55)"/>`;
-      if (narrow && h % 2) continue;
+      if (h % (W < 330 ? 4 : narrow ? 2 : 1)) continue;   // fewer hour labels on narrow timelines
       g += `<text x="${x}" y="${TL.axisY - 8}" fill="#a3a9b1" font-size="11" font-family="Barlow Semi Condensed" letter-spacing="1.2" text-anchor="${h === 0 ? "start" : h === Tmax / 60 ? "end" : "middle"}">T+${h}:00</text>`;
     }
     g += `<line x1="${X(0)}" x2="${X(Tmax)}" y1="${TL.axisY}" y2="${TL.axisY}" stroke="rgba(255,255,255,.35)"/>`;
@@ -564,7 +592,8 @@
     }
 
     const back = st.after ? 0 : st.p.back + ((st.q.back ?? st.p.back) - st.p.back) * st.f;
-    const mPlan = wb.budget_min - (T + back), mBad = wb.eva_limit_h * 60 - (T + bf * back);
+    const Tm = st.after ? m.profile[m.profile.length - 1].t : T;   // once home, the margins stay at their arrival values
+    const mPlan = wb.budget_min - (Tm + back), mBad = wb.eva_limit_h * 60 - (Tm + bf * back);
     const leg = st.gap ? st.q.leg : st.p.leg;
     const nextS = stopById(m.order[leg + 1] || "base");
     const here = st.gap ? stopById(m.order[st.q.leg]) : null;
@@ -580,7 +609,7 @@
       whereVal = `${shortName(nextS).toUpperCase()} · ${(dist / 1000).toFixed(2)} KM ${compass(bearing(pos, [nextS.lat, nextS.lon]))}`;
       whereSub = `Slope ${Math.round(st.p.s)}° · ${Math.round(st.p.z)} m`;
     }
-    const worstNow = Math.min(mPlan, mBad), suitBad = back > lim, alarm = worstNow < 0 || suitBad;
+    const worstNow = Math.min(mPlan, mBad), suitBad = back > lim, alarm = !st.after && (worstNow < 0 || suitBad);
     const live = $("#live");
     live.hidden = false;
     live.className = `pnl live ${alarm ? "alarm" : ""}`;
@@ -656,7 +685,7 @@
     if (!m.grid || !window.Worker) return;
     Promise.all(["grid_slope.u8", "grid_rough.u8", "grid_dem.i16"].map((f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.arrayBuffer())))
       .then(([slope, rough, dem]) => {
-        worker = new Worker("router.js?v=3");
+        worker = new Worker("router.js?v=6");
         worker.onmessage = onWorker;
         worker.postMessage({ type: "init", grid: m.grid, slope, rough, dem }, [slope, rough, dem]);
       }).catch(() => {});
@@ -665,8 +694,14 @@
     if (!worker) return;
     worker.postMessage({ type: "field", id: ++planId, params: params(), stops: S.m.stops.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
   }
+  let toastTimer = 0;
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 8000);
+  }
   function replan() {
-    if (!worker) return;
+    if (!worker) { S.pendingReplan = true; $("#planStatus").textContent = "Loading the terrain…"; return; }   // re-run when the terrain is in
     const on = new Set([...document.querySelectorAll("input[data-stop]")].filter((i) => i.checked).map((i) => i.dataset.stop));
     const order = DEFAULT_ORDER.filter((id) => id === "base" || on.has(id));
     if (!order.includes(S.sel)) S.sel = order[1] || "base";
@@ -676,10 +711,20 @@
   }
   function onWorker(e) {
     const r = e.data;
-    if (r.type === "ready") { requestField(); return; }
+    if (r.type === "ready") { requestField(); if (S.pendingReplan) { S.pendingReplan = false; replan(); } return; }
     if (r.type === "field") { if (r.id === planId) setField(r.field); return; }
     if (r.type !== "plan" || r.id !== planId) return;
-    if (r.error) { $("#planStatus").innerHTML = `<span class="bad">${esc(r.error)}</span>`; return; }
+    if (r.error) {
+      if (S.undo) {   // put the dragged stop back where it was
+        const st = stopById(S.undo.id);
+        st.lat = S.undo.lat; st.lon = S.undo.lon; st.moved = S.undo.moved; S.undo = null;
+        refreshMarkers(); renderStopList(); renderStopPanel();
+      }
+      $("#planStatus").innerHTML = `<span class="bad">${esc(r.error)}</span>`;
+      toast(`${r.error}. Showing the last plan that worked.`);
+      return;
+    }
+    S.undo = null;
     const m = S.m, p = params();
     m.order = [...new Set(r.legs.map((l) => l.frm))].concat(["base"]);
     m.legs = r.legs.map(({ coords, ...l }) => l);
@@ -812,7 +857,7 @@
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
         <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech.</li>
         <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech. They are not live.</li>
-        <li>Space weather: NASA DONKI (CCMC), live when the free demo key allows; otherwise the app shows a saved copy and its date.</li></ul>
+        <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service; if it does not answer, the app shows a saved copy and its date.</li></ul>
       <h3>Use of AI tools</h3>
       <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The mission badge is an AI-generated image (Higgsfield). All map and rover data are from NASA, USGS and ESA.</p>`;
   }

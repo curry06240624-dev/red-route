@@ -23,6 +23,7 @@ a { color: #ffb08f; }
 .leaflet-control-attribution { background: rgba(9,10,12,.7) !important; color: var(--dim) !important; font-size: 10.5px; }
 .leaflet-control-attribution a { color: var(--muted) !important; }
 .leaflet-bottom.leaflet-right { bottom: 150px; }
+.leaflet-right .leaflet-control-zoom { margin-right: 394px; }
 .leaflet-bar a { background: var(--pnl); color: var(--text); border-color: var(--line); border-radius: 0 !important; }
 
 .pnl { position: fixed; z-index: 900; background: var(--pnl); border: 1px solid var(--line); border-radius: 2px;
@@ -118,12 +119,18 @@ body.guide-on .topnav button[data-open="planPanel"] { box-shadow: inset 0 0 0 2p
 .live { top: 88px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 770px); display: flex; flex-wrap: wrap; justify-content: center; }
 .live > div { padding: 7px 14px; border-left: 1px solid var(--line); text-align: center; }
 .live > div:first-child { border-left: 0; }
+.live[hidden] { display: none; }
 .live .lbl { font-size: 9.5px; display: block; }
 .live b { font: 600 15px Barlow; white-space: nowrap; }
 .live .where b { font-size: 13.5px; letter-spacing: .04em; }
 .live small { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; }
 .live.alarm { border-color: var(--bad); }
 .live .alarm-txt { color: var(--bad); font: 700 12px var(--cond); letter-spacing: .12em; align-self: center; }
+
+/* message when a change cannot be planned */
+.toast { left: 50%; top: 152px; transform: translateX(-50%); z-index: 1600; max-width: min(620px, calc(100vw - 32px)); padding: 10px 16px;
+  background: rgba(46, 14, 14, .96); border-color: var(--bad); color: #fff; font-size: 13.5px; }
+.toast[hidden] { display: none; }
 
 /* legend */
 .legend { left: 348px; bottom: 164px; padding: 10px 12px; font: 600 10.5px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -209,7 +216,9 @@ body.guide-on .topnav button[data-open="planPanel"] { box-shadow: inset 0 0 0 2p
   .play { width: 78px; }
   .topnav .help { padding: 6px 12px; }
   .legend { display: none; }
-  .live { position: absolute; top: auto; bottom: calc(42vh + 8px); left: 8px; right: 8px; flex-wrap: wrap; }
+  .live { position: absolute; top: auto; bottom: calc(42vh + 8px); left: 8px; right: 52px; flex-wrap: wrap; max-width: none; }   /* room for the zoom buttons */
+  .leaflet-right .leaflet-control-zoom { margin-right: 10px; }
+  .toast { position: fixed; left: 8px; right: 8px; top: auto; bottom: 10px; transform: none; max-width: none; margin: 0; }
   .drawer { position: fixed; top: auto; bottom: 0; left: 0; right: 0; max-height: 70vh; margin: 0; }
   .leaflet-bottom.leaflet-right { bottom: 0; }
 }
@@ -282,7 +291,7 @@ body.astro-on { overflow: hidden; }
 }
 
 /* v2: astronaut view with the small moving route map (map on the right, numbers on the left) */
-.astro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+.astro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(min-content, 1fr) auto auto;
   grid-template-areas: "top top" "status map" "tiles map" "track track" "ctl ctl"; column-gap: 18px; row-gap: 16px; }
 .astro-top { grid-area: top; }
 .astro-status { grid-area: status; }
@@ -291,6 +300,7 @@ body.astro-on { overflow: hidden; }
 .astro-track { grid-area: track; }
 .astro-ctl { grid-area: ctl; margin-top: 0; }
 .astro-word { font-size: clamp(56px, 8vw, 128px); }
+.astro-status.warn .astro-word, .astro-status.bad .astro-word { font-size: clamp(38px, 5.2vw, 84px); }
 .astro-site { margin-top: 8px; font: 600 clamp(17px, 1.8vw, 24px) var(--cond); letter-spacing: .02em; }
 .astro-site:empty { display: none; }
 .astro-next b { font-size: clamp(30px, 3.4vw, 56px); }
@@ -324,3 +334,8 @@ body.astro-on { overflow: hidden; }
   transform-origin: 50% 50%; }
 .amap-n.fixed { border-color: var(--route); }
 .astro-tile .astro-next b { white-space: normal; overflow: visible; text-overflow: clip; font-size: clamp(26px, 2.6vw, 44px); line-height: 1.02; }
+/* short laptop screens: the astronaut view fits without scrolling */
+@media (min-width: 901px) and (max-height: 760px) {
+  .astro { row-gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .astro-track { height: 60px; }
+}

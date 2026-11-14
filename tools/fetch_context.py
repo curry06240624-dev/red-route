@@ -2,14 +2,16 @@
 
 - Perseverance raw images from the sols the rover spent at each stop (NASA/JPL-Caltech raw image API)
 - Perseverance MEDA weather summaries (NASA/JPL-Caltech weather feed)
-- Space-weather notifications from NASA's DONKI service (api.nasa.gov)
+- Space-weather notifications from NASA's DONKI service (CCMC web service; api.nasa.gov as a second try)
 - A simplified Perseverance traverse line (NASA/JPL-Caltech MMGIS)
 
 Run after build_layers.py:  py -3.12 tools/fetch_context.py
+Space weather only:          py -3.12 tools/fetch_context.py donki
 """
 import io
 import json
 import os
+import sys
 import urllib.request
 from datetime import date, timedelta
 
@@ -104,7 +106,29 @@ def simplify(coords, tol=1e-5):
     return out
 
 
+def fetch_donki():
+    """Save the last 30 days of DONKI notices. The whole text is kept: the Mars arrival time is near the end."""
+    end = date.today()
+    start = end - timedelta(days=30)
+    q = f"startDate={start}&endDate={end}&type=all"
+    for url in (f"https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?{q}",        # NASA CCMC, no key needed
+                f"https://api.nasa.gov/DONKI/notifications?{q}&api_key=DEMO_KEY"):    # rate-limited demo key
+        try:
+            notes = get_json(url)
+            slim = [dict(type=n.get("messageType"), id=n.get("messageID"), issued=n.get("messageIssueTime"),
+                         url=n.get("messageURL"), body=(n.get("messageBody") or "")[:8000]) for n in notes]
+            json.dump(dict(source="NASA DONKI (CCMC)", fetched=str(end), notes=slim),
+                      open(os.path.join(OUT, "donki.json"), "w"), separators=(",", ":"))
+            print("DONKI notifications:", len(slim), "from", url.split("/")[2])
+            return
+        except Exception as e:
+            print("DONKI failed", url.split("/")[2], e)
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "donki":
+        fetch_donki()
+        return
     mission_path = os.path.join(OUT, "mission.json")
     mission = json.load(open(mission_path, encoding="utf-8"))
 
@@ -179,18 +203,7 @@ def main():
     except Exception as e:
         print("MEDA failed", e)
 
-    try:
-        end = date.today()
-        start = end - timedelta(days=30)
-        notes = get_json(f"https://api.nasa.gov/DONKI/notifications?startDate={start}&endDate={end}"
-                         f"&type=all&api_key=DEMO_KEY")
-        slim = [dict(type=n.get("messageType"), id=n.get("messageID"), issued=n.get("messageIssueTime"),
-                     url=n.get("messageURL"), body=(n.get("messageBody") or "")[:1200]) for n in notes]
-        json.dump(dict(source="NASA DONKI (CCMC)", fetched=str(end), notes=slim),
-                  open(os.path.join(OUT, "donki.json"), "w"), separators=(",", ":"))
-        print("DONKI notifications:", len(slim))
-    except Exception as e:
-        print("DONKI failed", e)
+    fetch_donki()
 
     t = json.load(open(os.path.join(RAW, "M20_traverse.json"), encoding="utf-8"))
     feats = []

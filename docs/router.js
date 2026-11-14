@@ -166,8 +166,9 @@ function plan(p, stops, order) {
   for (const s of stops) {
     const c = Math.round((s.lon - G.lon0) / G.dlon - 0.5), r = Math.round((G.lat1 - s.lat) / G.dlat - 0.5);
     cell[s.id] = snap(cost, r, c);
-    if (cell[s.id] < 0) return { error: `${s.name} is on ground steeper than ${p.maxSlope}°` };
+    if (cell[s.id] < 0) return { error: `${s.name} is outside the mapped area or on ground steeper than ${p.maxSlope}°` };
   }
+  const nameOf = (id) => (stops.find((s) => s.id === id) || {}).name || id;
   const back = search(cost, cell[order[0]], -1, p.vFlat).dist;   // walk-back field from base camp
 
   const legs = [], profile = [], where = [];
@@ -176,7 +177,7 @@ function plan(p, stops, order) {
   for (let k = 0; k < order.length - 1; k++) {
     const a = cell[order[k]], b = cell[order[k + 1]];
     const { dist, prev } = search(cost, a, b, p.vFlat);
-    if (!isFinite(dist[b])) return { error: `No safe path from ${order[k]} to ${order[k + 1]} with these rules` };
+    if (!isFinite(dist[b])) return { error: `No safe path from ${nameOf(order[k])} to ${nameOf(order[k + 1])} with these rules` };
     const path = [];
     for (let v = b; v !== -1; v = prev[v]) { path.push(v); if (v === a) break; }
     path.reverse();
