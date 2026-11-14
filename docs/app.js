@@ -21,10 +21,13 @@
       { maxNativeZoom: 17, maxZoom: 19, bounds: JEZ_HIRISE, attribution: `${credit} · HiRISE (NASA/JPL/UArizona, USGS)` }),
     ctx: L.tileLayer(trekUrl("Jezero_CTX_BlockAdj_dd", "png"),
       { maxNativeZoom: 14, maxZoom: 19, bounds: JEZ_CTX, attribution: `${credit} · CTX (NASA/JPL/MSSS)` }),
+    hrsc: L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"),
+      { maxNativeZoom: 8, maxZoom: 19, attribution: `${credit} · Mars Express HRSC (ESA/DLR/FU Berlin) + MOLA (NASA), USGS blend` }),
     mola: L.tileLayer(trekUrl("Mars_MGS_MOLA_ClrShade_merge_global_463m", "jpg"),
       { maxNativeZoom: 7, maxZoom: 19, attribution: `${credit} · MOLA (NASA/GSFC)` }),
   };
-  const context = L.tileLayer(trekUrl("Mars_Viking_MDIM21_ClrMosaic_global_232m", "jpg"), { maxNativeZoom: 8, maxZoom: 19, opacity: 1 });
+  // Zoomed-out context under everything: ESA Mars Express HRSC blended with NASA MOLA elevation.
+  const context = L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, opacity: 1 });
   context.addTo(map);
   let currentBase = "hirise";
   base.hirise.addTo(map);
@@ -107,7 +110,7 @@
       box.appendChild(row);
     }
     const sel = el("div", "base-select");
-    const names = { hirise: "HiRISE 25 cm photo", ctx: "CTX 6 m photo", mola: "MOLA elevation" };
+    const names = { hirise: "HiRISE 25 cm photo", ctx: "CTX 6 m photo", hrsc: "HRSC + MOLA relief (ESA/NASA)", mola: "MOLA elevation" };
     for (const k of Object.keys(base)) {
       const btn = el("button", k === currentBase ? "on" : "", names[k]);
       btn.addEventListener("click", () => {
@@ -166,7 +169,24 @@
         ? `<b>Walk-back rule: safe</b>At every point the crew can reach base camp with at least ${Math.round(wb.worst.margin_min)} min to spare inside the ${wb.eva_limit_h} h EVA (${Math.round(wb.reserve * 100)} % kept in reserve).`
         : `<b>Walk-back rule: broken</b>At the worst point, ${fmtMin(wb.worst.t)} into the EVA, the walk back to base takes ${fmtMin(wb.worst.back)}. That is ${fmtMin(-wb.worst.margin_min)} over the ${fmtMin(wb.budget_min)} budget (${wb.eva_limit_h} h EVA, ${Math.round(wb.reserve * 100)} % reserve). Drop a stop, move base camp closer, or split it into two EVAs.`}
       </div>
+      ${m.rover_check ? `<div class="proof"><b>Checked against Perseverance</b>At ${m.rover_check.n} spots the rover drove through, our slope map matches the rover's own tilt sensor: average difference ${m.rover_check.slope_mae_deg}°, ${m.rover_check.within_3deg_pct}% within 3° (correlation ${m.rover_check.slope_r}). <a href="#" id="proofLink">See the test</a></div>` : ""}
       <p class="small">Terrain: ${esc(m.dtm)} · ${m.grid_m} m grid</p>`;
+    const pl = $("#proofLink");
+    if (pl) pl.addEventListener("click", (e) => { e.preventDefault(); document.querySelector('.tabs button[data-view="about"]').click(); $("#checks").scrollIntoView({ behavior: "smooth" }); });
+  }
+
+  function scatterSvg(pairs) {
+    const W = 320, H = 220, pad = 34, max = Math.max(20, ...pairs.flat());
+    const X = (v) => pad + (v / max) * (W - pad - 10), Y = (v) => H - pad + 10 - (v / max) * (H - pad - 10);
+    let g = `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(max)}" y2="${Y(max)}" stroke="#3a4558" stroke-dasharray="4 4"/>`;
+    for (const t of [0, 5, 10, 15, 20].filter((t) => t <= max)) {
+      g += `<text x="${X(t)}" y="${H - 8}" font-size="10" fill="#98a2b3" text-anchor="middle">${t}°</text>`;
+      g += `<text x="${pad - 6}" y="${Y(t) + 3}" font-size="10" fill="#98a2b3" text-anchor="end">${t}°</text>`;
+    }
+    for (const [s, t] of pairs) g += `<circle cx="${X(t).toFixed(1)}" cy="${Y(s).toFixed(1)}" r="3" fill="#ff5a36" fill-opacity=".65"/>`;
+    g += `<text x="${W / 2}" y="${H - 22}" font-size="10" fill="#c7cdd8" text-anchor="middle" dy="14">Rover tilt sensor</text>`;
+    g += `<text x="10" y="${H / 2}" font-size="10" fill="#c7cdd8" transform="rotate(-90 10 ${H / 2})" text-anchor="middle">Red Route slope map</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Scatter plot of slope map against rover tilt">${g}</svg>`;
   }
 
   function renderStops(m) {
@@ -180,7 +200,8 @@
       card.innerHTML = `<div class="stop-head"><span class="num ${isBase ? "base" : ""}">${isBase ? "B" : i}</span>
           <h3>${isReturn ? "Back at base camp" : esc(s.name)}</h3></div>
         ${isReturn ? "" : `<p class="role">${esc(s.role)}</p>
-        <div class="meta"><span>${s.elev_m} m</span><span>sol ${s.rover_sol}</span>${s.dwell_min ? `<span>${s.dwell_min} min on site</span>` : ""}</div>`}`;
+        <div class="meta"><span>${s.elev_m} m</span><span>sol ${s.rover_sol}</span>${s.dwell_min ? `<span>${s.dwell_min} min on site</span>` : ""}</div>`}
+        ${leaveBy(m, id, i)}`;
       if (!isReturn && s.photos && s.photos.length) {
         const th = el("div", "thumbs");
         for (const p of s.photos.slice(0, 3)) {
@@ -199,6 +220,18 @@
           <span class="${l.max_slope > 12 ? "warn" : ""}">max ${l.max_slope}°</span>`));
       }
     });
+  }
+
+  // "Leave by" = the latest time the crew can leave this stop and still get home inside the usable EVA time.
+  function leaveBy(m, id, i) {
+    if (!m.timeline || i === 0 || i === m.order.length - 1) return "";
+    const t = m.timeline[i];
+    if (!t || t.id !== id) return "";
+    const hmm = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+    const ok = t.spare_min >= 0, tight = ok && t.spare_min < 30;
+    return `<div class="leaveby ${ok ? (tight ? "tight-b" : "ok") : "bad"}">
+      <span>Leave by <b>T+${hmm(t.leave_by_min)}</b></span>
+      <span>planned T+${hmm(t.depart_min)} · ${ok ? "+" : "−"}${fmtMin(Math.abs(t.spare_min))} spare</span></div>`;
   }
 
   /* ---------- conditions ---------- */
@@ -365,7 +398,7 @@
   function params() {
     const v = (k) => parseFloat(document.querySelector(`#sl-${k}`).value);
     return { maxSlope: v("maxSlope"), vFlat: v("vFlat"), roughPenalty: v("roughPenalty"), roughM: state.base.assumptions.rough_m,
-      evaH: v("evaH"), reserve: v("reserve") / 100 };
+      evaH: v("evaH"), reserve: v("reserve") / 100, badFactor: state.base.assumptions.bad_day_factor || 2 };
   }
 
   function replan() {
@@ -380,14 +413,21 @@
 
   function onPlan(e) {
     const r = e.data;
-    if (r.type === "ready") { $("#planStatus").textContent = `Live re-planning ready · ${state.mission.grid.gx.toFixed(1)} m grid`; return; }
+    if (r.type === "ready") {
+      $("#planStatus").textContent = `Live re-planning ready · ${state.mission.grid.gx.toFixed(1)} m grid`;
+      requestField();
+      return;
+    }
+    if (r.type === "field") { if (r.id === planId) setZoneField(r.field); return; }
     if (r.type !== "plan" || r.id !== planId) return;
     if (r.error) { $("#planStatus").innerHTML = `<span style="color:#fca5a5">${esc(r.error)}</span>`; return; }
     const m = state.mission;
     const p = params();
     m.order = [...new Set(r.legs.map((l) => l.frm))].concat(["base"]);
     m.legs = r.legs.map(({ coords, ...l }) => l);
-    m.totals = r.totals; m.walkback = r.walkback; m.profile = r.profile;
+    m.totals = r.totals; m.walkback = r.walkback; m.profile = r.profile; m.timeline = r.timeline;
+    setZoneField(r.field);
+    if (eva.worst) { map.removeLayer(eva.worst); eva.worst = null; }
     m.assumptions = Object.assign({}, m.assumptions, { v_flat_ms: p.vFlat, max_slope_deg: p.maxSlope, rough_penalty: p.roughPenalty, eva_limit_h: p.evaH, reserve: p.reserve });
     for (const s of m.stops) {
       const c = r.stopCells[s.id];
@@ -396,7 +436,15 @@
     }
     drawRouteLine({ type: "FeatureCollection", features: r.legs.map((l, i) => ({ type: "Feature", properties: { leg: i }, geometry: { type: "LineString", coordinates: l.coords } })) });
     renderSummary(m); renderStops(m); drawProfile(m); renderConditions(m, state.donki, state.meda);
+    syncClockRange();
+    if (eva.T > 0 && !eva.playing) setTime(Math.min(eva.T, +clockSl.max));
     $("#planStatus").textContent = `Re-planned in ${(r.ms / 1000).toFixed(1)} s · ${state.mission.grid.gx.toFixed(1)} m grid`;
+  }
+
+  function requestField() {
+    if (!worker) return;
+    worker.postMessage({ type: "field", id: ++planId, params: params(),
+      stops: state.mission.stops.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
   }
 
   function resetPlan() {
@@ -408,94 +456,191 @@
     });
     document.querySelectorAll("input[data-stop]").forEach((i) => (i.checked = true));
     state.mission = b;
+    clearEva();
     for (const s of b.stops) state.stopMarkers[s.id].setLatLng([s.lat, s.lon]).setIcon(stopIcon(s.id, b));
     fetch("data/route.geojson").then((x) => x.json()).then((route) => {
       drawRouteLine(route); renderSummary(b); renderStops(b); drawProfile(b); renderConditions(b, state.donki, state.meda);
+      syncClockRange();
+      requestField();
       $("#planStatus").textContent = `Default plan · ${b.grid_m} m grid`;
     });
   }
 
-  /* ---------- EVA playback with a helmet-style HUD ---------- */
+  /* ---------- EVA clock: crew marker, helmet-style HUD and the "can still get home" zone ---------- */
+  // One control: Play / Pause plus a time slider from 0 to the EVA limit.
+  // At time T the green zone shows every place the crew could still walk home from inside the budget
+  // (walk-back time <= usable time - T). The planned route has to stay inside it.
   const hud = el("div", "hud");
   hud.hidden = true;
   $(".mapwrap").appendChild(hud);
-  const playBtn = el("button", "play-btn", '<span class="tri"></span>Play EVA');
-  $(".mapwrap").appendChild(playBtn);
-  let anim = null;
-  playBtn.addEventListener("click", () => (anim ? stopPlay() : startPlay()));
+  const clock = el("div", "clock");
+  clock.innerHTML = `<button class="play-btn" id="playBtn"><span class="tri"></span>Play EVA</button>
+    <input type="range" id="clockSl" min="0" max="480" step="1" value="0" aria-label="EVA clock">
+    <span class="clock-t" id="clockT">T+0:00</span>`;
+  $(".mapwrap").appendChild(clock);
+  const playBtn = $("#playBtn"), clockSl = $("#clockSl"), clockT = $("#clockT");
+  const zone = { field: null, overlay: null, canvas: document.createElement("canvas"), img: null, url: null, busy: false, pendingT: null };
+  const eva = { raf: 0, playing: false, marker: null, pulse: null, worst: null, T: 0 };
+  const hm = (m) => `${Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
+
+  playBtn.addEventListener("click", () => (eva.playing ? pause() : play()));
+  clockSl.addEventListener("input", () => { pause(); setTime(+clockSl.value); });
+
+  function syncClockRange() {
+    const m = state.mission;
+    if (m) clockSl.max = Math.round(m.walkback.eva_limit_h * 60);
+  }
+
+  function setZoneField(field) {
+    zone.field = field;
+    if (eva.T > 0 || eva.playing) renderZone(eva.T);
+  }
+
+  function renderZone(T) {
+    const g = state.mission && state.mission.grid;
+    if (!zone.field || !g) return;
+    if (zone.busy) { zone.pendingT = T; return; }
+    zone.busy = true;
+    const { w, h } = g;
+    if (zone.canvas.width !== w) { zone.canvas.width = w; zone.canvas.height = h; zone.img = null; }
+    const ctx = zone.canvas.getContext("2d");
+    if (!zone.img) zone.img = ctx.createImageData(w, h);
+    const px = zone.img.data, f = zone.field;
+    const thr = Math.round((state.mission.walkback.budget_min - T) * 10);
+    for (let i = 0, n = w * h; i < n; i++) {
+      const o = i * 4;
+      if (f[i] > thr) { px[o + 3] = 0; continue; }
+      const edge = (i % w < w - 1 && f[i + 1] > thr) || (i % w > 0 && f[i - 1] > thr) || (i + w < n && f[i + w] > thr) || (i >= w && f[i - w] > thr);
+      if (edge) { px[o] = 187; px[o + 1] = 247; px[o + 2] = 208; px[o + 3] = 235; }
+      else { px[o] = 34; px[o + 1] = 197; px[o + 2] = 94; px[o + 3] = 62; }
+    }
+    ctx.putImageData(zone.img, 0, 0);
+    zone.canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      if (!zone.overlay) {
+        zone.overlay = L.imageOverlay(url, state.mission.overlay_bounds, { interactive: false, className: "ov-zone" }).addTo(map);
+      } else {
+        zone.overlay.setUrl(url);
+        if (!map.hasLayer(zone.overlay)) zone.overlay.addTo(map);
+      }
+      if (zone.url) URL.revokeObjectURL(zone.url);
+      zone.url = url;
+      if (state.routeCasing) { state.routeCasing.bringToFront(); state.routeLine.bringToFront(); }
+      zone.busy = false;
+      if (zone.pendingT !== null) { const t = zone.pendingT; zone.pendingT = null; renderZone(t); }
+    }, "image/png");
+  }
+
+  // Where the crew is at mission time T (minutes). During a stop the crew stays at the stop.
+  function stateAt(T) {
+    const P = state.mission.profile;
+    const last = P[P.length - 1];
+    if (T >= last.t) return { p: last, q: last, f: 0, d: last.d, gap: false, after: true };
+    let i = 0;
+    while (i < P.length - 1 && P[i + 1].t <= T) i++;
+    const p = P[i], q = P[Math.min(i + 1, P.length - 1)];
+    const gap = q.leg !== p.leg;
+    const f = !gap && q.t > p.t ? (T - p.t) / (q.t - p.t) : 0;
+    return { p, q, f, d: p.d + (q.d - p.d) * f, gap, after: false };
+  }
+
+  function setTime(T) {
+    const m = state.mission;
+    if (!m) return;
+    eva.T = T;
+    clockSl.value = Math.round(T);
+    clockT.textContent = `T+${hm(T)}`;
+    const budget = m.walkback.budget_min;
+    const s = stateAt(T), P = m.profile;
+    const baseStop = m.stops.find((x) => x.id === "base");
+    const pos = s.after ? [baseStop.lat, baseStop.lon] : pointAtDistance(s.d);
+    if (!eva.marker) {
+      eva.marker = L.circleMarker(pos, { radius: 9, color: "#fff", weight: 3, fillColor: "#38bdf8", fillOpacity: 1 });
+      eva.pulse = L.circleMarker(pos, { radius: 18, color: "#38bdf8", weight: 2, fill: false, opacity: 0.6 });
+    }
+    eva.marker.setLatLng(pos).addTo(map);
+    eva.pulse.setLatLng(pos).addTo(map);
+    if (eva.playing && !map.getBounds().pad(-0.25).contains(pos)) map.panTo(pos, { animate: true, duration: 0.5 });
+    const w = m.walkback.worst;
+    if (w && w.lat != null && !eva.worst) {
+      eva.worst = L.marker([w.lat, w.lon], { interactive: false, icon: L.divIcon({ className: "",
+        html: `<div class="tight">Tightest: ${w.margin_min >= 0 ? "+" : "−"}${fmtMin(Math.abs(w.margin_min))}</div>`, iconSize: [0, 0] }) });
+    }
+    if (eva.worst) eva.worst.addTo(map);
+    renderZone(T);
+
+    const p = s.p, q = s.q, f = s.f;
+    const back = s.after ? 0 : p.back + ((q.back ?? p.back) - p.back) * f;
+    const margin = budget - (T + back);
+    const leg = s.gap ? q.leg : p.leg;
+    const nextId = m.order[leg + 1] || "base", nextStop = m.stops.find((x) => x.id === nextId);
+    const here = s.gap ? m.stops.find((x) => x.id === m.order[q.leg]) : null;
+    const tl = here && m.timeline ? m.timeline.find((x) => x.id === here.id) : null;
+    const distNext = nextStop ? map.distance(pos, [nextStop.lat, nextStop.lon]) * (3396190 / 6378137) : 0;
+    const brg = nextStop ? bearing(pos, [nextStop.lat, nextStop.lon]) : 0;
+    hud.hidden = false;
+    hud.className = `hud ${margin < 0 ? "alarm" : margin < 30 ? "caution" : ""}`;
+    hud.innerHTML = `<div class="hud-row"><span>MET</span><b>T+${hm(T)}</b><span>usable ${hm(budget)} of ${m.walkback.eva_limit_h} h</span></div>
+      ${s.after ? `<div class="hud-stop">BACK AT BASE CAMP<br><small>EVA complete. ${fmtMin(Math.max(0, budget - T))} of usable time left.</small></div>`
+        : here ? `<div class="hud-stop">ON SITE · ${esc(here.name.toUpperCase())}<br><small>${tl ? `Leave by T+${hm(tl.leave_by_min)} · ${tl.spare_min >= 0 ? "+" : "−"}${fmtMin(Math.abs(tl.spare_min))} spare` : esc(here.role)}</small></div>`
+        : `<div class="hud-row"><span>NEXT</span><b>${esc(nextStop.name)}</b><span>${(distNext / 1000).toFixed(2)} km ${compass(brg)}</span></div>`}
+      <div class="hud-grid">
+        <div><span>SLOPE</span><b class="${p.s > 12 ? "warnc" : ""}">${s.after ? 0 : p.s.toFixed(0)}°</b></div>
+        <div><span>ELEV</span><b>${Math.round(p.z)} m</b></div>
+        <div><span>WALK BACK</span><b>${fmtMin(back)}</b></div>
+        <div><span>MARGIN</span><b class="${margin < 0 ? "badc" : margin < 30 ? "warnc" : "okc"}">${margin < 0 ? "−" : "+"}${fmtMin(Math.abs(margin))}</b></div>
+      </div>
+      ${margin < 0 ? '<div class="hud-alarm">TURN BACK: walk-back limit exceeded</div>' : '<div class="hud-zone"><i></i>Green = you can still get home</div>'}`;
+    const cursor = document.querySelector("#cursor");
+    if (cursor && !s.after) {
+      const svg = $("#profileSvg"), W = svg.viewBox.baseVal.width, x = 44 + (s.d / P[P.length - 1].d) * (W - 54);
+      cursor.setAttribute("x1", x); cursor.setAttribute("x2", x); cursor.setAttribute("visibility", "visible");
+    }
+  }
+
+  function play() {
+    const m = state.mission;
+    if (!m) return;
+    syncClockRange();
+    const end = Math.max(+clockSl.max, m.profile[m.profile.length - 1].t);
+    const start = eva.T >= end ? 0 : eva.T;
+    if (start === 0) map.flyTo([m.stops[0].lat, m.stops[0].lon], 14.5, { duration: 0.6 });
+    eva.playing = true;
+    playBtn.innerHTML = '<span class="sq"></span>Pause';
+    const t0 = performance.now(), realMs = 30000 * ((end - start) / end);
+    const frame = (now) => {
+      if (!eva.playing) return;
+      const T = Math.min(end, start + ((now - t0) / realMs) * (end - start));
+      setTime(T);
+      if (T < end) eva.raf = requestAnimationFrame(frame);
+      else { eva.playing = false; playBtn.innerHTML = '<span class="tri"></span>Replay EVA'; }
+    };
+    eva.raf = requestAnimationFrame(frame);
+  }
+
+  function pause() {
+    eva.playing = false;
+    cancelAnimationFrame(eva.raf);
+    playBtn.innerHTML = '<span class="tri"></span>Play EVA';
+  }
+
+  function clearEva() {
+    pause();
+    eva.T = 0; clockSl.value = 0; clockT.textContent = "T+0:00";
+    hud.hidden = true;
+    for (const k of ["marker", "pulse", "worst"]) if (eva[k] && map.hasLayer(eva[k])) map.removeLayer(eva[k]);
+    eva.worst = null;
+    if (zone.overlay && map.hasLayer(zone.overlay)) map.removeLayer(zone.overlay);
+    const cursor = document.querySelector("#cursor");
+    if (cursor) cursor.setAttribute("visibility", "hidden");
+  }
 
   function bearing(a, b) {
     const toRad = Math.PI / 180, y = Math.sin((b[1] - a[1]) * toRad) * Math.cos(b[0] * toRad);
     const x = Math.cos(a[0] * toRad) * Math.sin(b[0] * toRad) - Math.sin(a[0] * toRad) * Math.cos(b[0] * toRad) * Math.cos((b[1] - a[1]) * toRad);
-    const deg = (Math.atan2(y, x) * 180) / Math.PI;
-    return (deg + 360) % 360;
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
   }
   const compass = (d) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(d / 45) % 8];
-
-  function startPlay() {
-    const m = state.mission, P = m.profile;
-    const tEnd = P[P.length - 1].t, realMs = 30000;
-    const budget = m.walkback.budget_min;
-    const marker = L.circleMarker([P[0].d, 0], { radius: 9, color: "#fff", weight: 3, fillColor: "#38bdf8", fillOpacity: 1 });
-    const pulse = L.circleMarker([0, 0], { radius: 18, color: "#38bdf8", weight: 2, fill: false, opacity: 0.6 });
-    playBtn.innerHTML = '<span class="sq"></span>Stop';
-    hud.hidden = false;
-    const t0 = performance.now();
-    map.flyTo([m.stops[0].lat, m.stops[0].lon], 15, { duration: 0.6 });
-    anim = { marker, pulse, raf: 0 };
-    const frame = (now) => {
-      const T = Math.min(tEnd, ((now - t0) / realMs) * tEnd);
-      let i = 0;
-      while (i < P.length - 1 && P[i + 1].t <= T) i++;
-      const p = P[i], q = P[Math.min(i + 1, P.length - 1)];
-      const gap = q.leg !== p.leg;            // between legs = working at a stop
-      const f = !gap && q.t > p.t ? (T - p.t) / (q.t - p.t) : 0;
-      const d = p.d + (q.d - p.d) * f;
-      const pos = pointAtDistance(d);
-      if (pos) {
-        if (!map.hasLayer(marker)) { marker.addTo(map); pulse.addTo(map); }
-        marker.setLatLng(pos); pulse.setLatLng(pos);
-        if (!map.getBounds().pad(-0.25).contains(pos)) map.panTo(pos, { animate: true, duration: 0.5 });
-      }
-      const leg = gap ? q.leg : p.leg;
-      const nextId = m.order[leg + 1] || "base", nextStop = m.stops.find((s) => s.id === nextId);
-      const here = gap ? m.stops.find((s) => s.id === m.order[q.leg]) : null;
-      const back = p.back + ((q.back ?? p.back) - p.back) * f;
-      const margin = budget - (T + back);
-      const distNext = pos && nextStop ? map.distance(pos, [nextStop.lat, nextStop.lon]) * (3396190 / 6378137) : 0;
-      const brg = pos && nextStop ? bearing(pos, [nextStop.lat, nextStop.lon]) : 0;
-      const hh = String(Math.floor(T / 60)).padStart(2, "0"), mm = String(Math.floor(T % 60)).padStart(2, "0");
-      hud.className = `hud ${margin < 0 ? "alarm" : margin < 30 ? "caution" : ""}`;
-      hud.innerHTML = `<div class="hud-row"><span>MET</span><b>${hh}:${mm}</b><span>EVA ${m.walkback.eva_limit_h} h</span></div>
-        ${here ? `<div class="hud-stop">ON SITE · ${esc(here.name.toUpperCase())}<br><small>${esc(here.role)}</small></div>`
-               : `<div class="hud-row"><span>NEXT</span><b>${esc(nextStop.name)}</b><span>${(distNext / 1000).toFixed(2)} km ${compass(brg)}</span></div>`}
-        <div class="hud-grid">
-          <div><span>SLOPE</span><b class="${p.s > 12 ? "warnc" : ""}">${p.s.toFixed(0)}°</b></div>
-          <div><span>ELEV</span><b>${Math.round(p.z)} m</b></div>
-          <div><span>WALK BACK</span><b>${fmtMin(back)}</b></div>
-          <div><span>MARGIN</span><b class="${margin < 0 ? "badc" : margin < 30 ? "warnc" : "okc"}">${margin < 0 ? "−" : "+"}${fmtMin(Math.abs(margin))}</b></div>
-        </div>
-        ${margin < 0 ? '<div class="hud-alarm">TURN BACK: walk-back limit exceeded</div>' : ""}`;
-      const cursor = document.querySelector("#cursor");
-      if (cursor) {
-        const svg = $("#profileSvg"), W = svg.viewBox.baseVal.width, x = 44 + (d / P[P.length - 1].d) * (W - 54);
-        cursor.setAttribute("x1", x); cursor.setAttribute("x2", x); cursor.setAttribute("visibility", "visible");
-      }
-      if (T < tEnd) anim.raf = requestAnimationFrame(frame);
-      else { playBtn.innerHTML = '<span class="tri"></span>Replay EVA'; anim.done = true; }
-    };
-    anim.raf = requestAnimationFrame(frame);
-  }
-
-  function stopPlay() {
-    cancelAnimationFrame(anim.raf);
-    map.removeLayer(anim.marker); map.removeLayer(anim.pulse);
-    anim = null;
-    hud.hidden = true;
-    playBtn.innerHTML = '<span class="tri"></span>Play EVA';
-    const cursor = document.querySelector("#cursor");
-    if (cursor) cursor.setAttribute("visibility", "hidden");
-  }
 
   /* ---------- lightbox ---------- */
   function openLightbox(p, s) {
@@ -535,17 +680,31 @@
         <tr><td>Terrain grid</td><td>${m.grid_m} m (${esc(m.dtm)})</td></tr>
       </table>
       <p class="small">These are planning assumptions for a hackathon prototype, not NASA flight rules.</p>
+      <h3 id="checks">Real-world checks</h3>
+      ${m.rover_check ? `<p><b>Slope map vs the rover's tilt sensor.</b> Perseverance records how far it is tilted at every stop (its IMU never sees our map). At ${m.rover_check.n} of those stops inside our area, the slope from the HiRISE model agrees with the measured tilt: average difference ${m.rover_check.slope_mae_deg}°, bias ${m.rover_check.slope_bias_deg}°, ${m.rover_check.within_3deg_pct}% within 3°, correlation ${m.rover_check.slope_r}.</p>
+      ${scatterSvg(m.rover_check.pairs)}
+      <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${m.rover_check.elev_mae_m} m on average (offset ${m.rover_check.elev_bias_m} m). The rover's positions are tied to the same orbital maps, so this mostly confirms the layers line up.</p>` : ""}
+      ${m.validation ? `<p><b>Same climb, different ramp.</b> Given the rover's start and end points for its climb onto the delta top (sols ${m.validation.sols[0]}–${m.validation.sols[1]}), our walker route is ${(m.validation.our_len_m / 1000).toFixed(1)} km and stays a median ${Math.round(m.validation.median_m)} m from the rover's track. The rover took a longer path for a 1-tonne vehicle and stopped at science targets on the way, so the two routes are not expected to match.</p>` : ""}
+      <h3>Where it can be wrong</h3>
+      <ul>
+        <li>The elevation model has 1 m posts, so rocks smaller than about 1–2 m are invisible to the slope and roughness layers. Crews would still need the HiRISE photo and the rover images to spot boulders.</li>
+        <li>The walking model is a hiking formula scaled down for a suit. Real suited speeds depend on the suit, the load and fatigue.</li>
+        <li>Space-weather notices from DONKI are written for Earth. A solar storm only matters for Mars if it is aimed at Mars.</li>
+        <li>The public MEDA weather summaries end in 2024, so the weather panel shows the latest available sols, not today's weather.</li>
+        <li>Dust, sand and loose soil are not mapped yet.</li>
+      </ul>
       <h3>NASA and USGS data used</h3>
       <ul>
         <li>HiRISE 1 m DTM and 25 cm orthomosaic of Jezero: USGS Astrogeology, Mars 2020 Terrain Relative Navigation products.</li>
-        <li>Map tiles: NASA JPL Mars Trek (HiRISE, CTX, MOLA, Viking).</li>
+        <li>Map tiles: NASA JPL Mars Trek (HiRISE, CTX, MOLA).</li>
+        <li>Partner agency data: ESA Mars Express HRSC elevation blended with NASA MOLA (USGS blend, served by Mars Trek).</li>
         <li>Perseverance waypoints and traverse: NASA/JPL-Caltech (MMGIS).</li>
         <li>Perseverance raw images (Navcam, Mastcam-Z, Hazcam): NASA/JPL-Caltech.</li>
         <li>Weather: Perseverance MEDA summaries, NASA/JPL-Caltech.</li>
         <li>Space weather: NASA DONKI notifications (CCMC), via api.nasa.gov.</li>
       </ul>
       <h3>Use of AI tools</h3>
-      <p>Code was written with help from an AI coding assistant (Claude). All data come from NASA and USGS; no AI-generated images are used in the app.</p>
+      <p>Code was written with help from an AI coding assistant (Claude), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them. All data come from NASA, USGS and ESA; no AI-generated images are used in the app.</p>
       </section>`;
   }
 })();

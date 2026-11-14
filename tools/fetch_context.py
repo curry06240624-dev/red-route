@@ -67,6 +67,8 @@ def main():
     mission_path = os.path.join(OUT, "mission.json")
     mission = json.load(open(mission_path, encoding="utf-8"))
 
+    # Local copies of the photos for the team (kept outside the repo, next to red-route/).
+    archive = os.path.join(os.path.dirname(ROOT), "nasa_data", "rover_photos")
     for st in mission["stops"]:
         sols = [st["rover_sol"] + k for k in (0, -1, 1, -2, 2)]
         pics = []
@@ -78,6 +80,17 @@ def main():
             except Exception as e:  # keep going; the app shows what it has
                 print("raw images failed for sol", s, e)
         st["photos"] = pics
+        folder = os.path.join(archive, f"{st['id']}_sol{st['rover_sol']}")
+        os.makedirs(folder, exist_ok=True)
+        for p in pics:
+            dest = os.path.join(folder, os.path.basename(p["medium"]))
+            if not os.path.exists(dest):
+                try:
+                    req = urllib.request.Request(p["medium"], headers=UA)
+                    open(dest, "wb").write(urllib.request.urlopen(req, timeout=60).read())
+                except Exception as e:
+                    print("photo download failed", p["medium"], e)
+        json.dump(pics, open(os.path.join(folder, "photos.json"), "w"), indent=1)
         print(st["name"], "sol", st["rover_sol"], "photos", len(pics))
     json.dump(mission, open(mission_path, "w"), separators=(",", ":"))
 

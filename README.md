@@ -47,9 +47,10 @@ python -m http.server 8765 --directory docs
 Python packages: numpy, scipy, scikit-image, rasterio, pillow.
 
 ## Use of AI tools
-The code was written with help from an AI coding assistant (Claude by Anthropic). The team chose the site,
-the science stops and the safety rules, and checked the results against NASA sources. All data shown in the
-app come from NASA and USGS. The app uses no AI-generated images.
+The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
+first version of the site, the science stops and the route rules; the team reviewed and approved them and
+asked for later changes. All data shown in the app come from NASA, USGS and ESA. The app itself uses no
+AI-generated images.
 
 ## License
 Apache-2.0 (see LICENSE). NASA and USGS data keep their own terms; see DATA.md.

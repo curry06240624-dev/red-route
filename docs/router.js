@@ -15,9 +15,23 @@ self.onmessage = (e) => {
     const t0 = performance.now();
     const res = plan(msg.params, msg.stops, msg.order);
     res.ms = Math.round(performance.now() - t0);
-    self.postMessage(Object.assign({ type: "plan", id: msg.id }, res));
+    self.postMessage(Object.assign({ type: "plan", id: msg.id }, res), res.field ? [res.field.buffer] : []);
+  } else if (msg.type === "field") {
+    // walk-back time from every cell to base camp, for the "can still get home" zone
+    const cost = buildCost(msg.params);
+    const b = msg.stops.find((s) => s.id === "base");
+    const cell = snap(cost, Math.round((G.lat1 - b.lat) / G.dlat - 0.5), Math.round((b.lon - G.lon0) / G.dlon - 0.5));
+    const field = toField(search(cost, cell, -1, msg.params.vFlat).dist);
+    self.postMessage({ type: "field", id: msg.id, field }, [field.buffer]);
   }
 };
+
+/* minutes x 10 as Uint16 (65535 = cannot get back) */
+function toField(distSec) {
+  const f = new Uint16Array(distSec.length);
+  for (let i = 0; i < f.length; i++) f[i] = isFinite(distSec[i]) ? Math.min(65534, Math.round(distSec[i] / 6)) : 65535;
+  return f;
+}
 
 const DEG = Math.PI / 180;
 
@@ -136,7 +150,7 @@ function plan(p, stops, order) {
   }
   const back = search(cost, cell[order[0]], -1, p.vFlat).dist;   // walk-back field from base camp
 
-  const legs = [], profile = [];
+  const legs = [], profile = [], where = [];
   let dTot = 0, tStart = 0;
   const dwell = Object.fromEntries(stops.map((s) => [s.id, s.dwell_min || 0]));
   for (let k = 0; k < order.length - 1; k++) {
@@ -158,6 +172,7 @@ function plan(p, stops, order) {
       }
       maxS = Math.max(maxS, s);
       coords.push(lonlat(v));
+      where.push(lonlat(v));
       profile.push({ d: Math.round((dTot + d) * 10) / 10, z: Math.round(z * 10) / 10, s: Math.round(s * 10) / 10, leg: k,
         t: Math.round((tStart + dist[v] / 60) * 10) / 10, back: Math.round((back[v] / 60) * 10) / 10 });
     }
@@ -165,14 +180,31 @@ function plan(p, stops, order) {
     legs.push({ frm: order[k], to: order[k + 1], dist_m: Math.round(d), walk_min: Math.round(walkMin * 10) / 10,
       gain_m: Math.round(gain), loss_m: Math.round(loss), max_slope: Math.round(maxS * 10) / 10, coords });
     dTot += d;
-    tStart += walkMin + dwell[order[k + 1]];
+    tStart += walkMin + (k + 1 < order.length - 1 ? dwell[order[k + 1]] : 0);
   }
   const budget = p.evaH * 60 * (1 - p.reserve);
-  let worst = { margin_min: 1e9 };
-  for (const q of profile) {
+  const badBudget = p.evaH * 60, bf = p.badFactor || 2;   // bad day: half speed home, reserve may be used
+  let worst = { margin_min: 1e9 }, worstBad = { margin_min: 1e9 };
+  profile.forEach((q, i) => {
     const m = budget - (q.t + q.back);
-    if (m < worst.margin_min) worst = { margin_min: Math.round(m * 10) / 10, t: q.t, back: q.back };
-  }
+    if (m < worst.margin_min) worst = { margin_min: Math.round(m * 10) / 10, t: q.t, back: q.back, lon: where[i][0], lat: where[i][1] };
+    const mb = badBudget - (q.t + bf * q.back);
+    if (mb < worstBad.margin_min) worstBad = { margin_min: Math.round(mb * 10) / 10, t: q.t, back: Math.round(bf * q.back * 10) / 10, lon: where[i][0], lat: where[i][1], leg: q.leg };
+  });
+  // turn-back time at each stop
+  const timeline = [];
+  let t = 0;
+  order.forEach((id, i) => {
+    if (i > 0) t += legs[i - 1].walk_min;
+    const arrive = t, depart = arrive + (i > 0 && i < order.length - 1 ? dwell[id] : 0);
+    const backMin = back[cell[id]] / 60;
+    const badLeave = badBudget - bf * backMin;
+    timeline.push({ id, arrive_min: Math.round(arrive * 10) / 10, depart_min: Math.round(depart * 10) / 10,
+      back_min: Math.round(backMin * 10) / 10, leave_by_min: Math.round((budget - backMin) * 10) / 10,
+      spare_min: Math.round((budget - backMin - depart) * 10) / 10,
+      bad_leave_by_min: Math.round(badLeave * 10) / 10, bad_spare_min: Math.round((badLeave - depart) * 10) / 10 });
+    t = depart;
+  });
   const walkMin = legs.reduce((s, l) => s + l.walk_min, 0);
   const dwellMin = order.slice(1, -1).reduce((s, id) => s + dwell[id], 0);
   const step = Math.max(1, Math.floor(profile.length / 700));
@@ -183,7 +215,10 @@ function plan(p, stops, order) {
       eva_h: Math.round(((walkMin + dwellMin) / 60) * 100) / 100,
       gain_m: legs.reduce((s, l) => s + l.gain_m, 0), loss_m: legs.reduce((s, l) => s + l.loss_m, 0),
       max_slope: Math.max(...legs.map((l) => l.max_slope)) },
-    walkback: { budget_min: Math.round(budget), worst, eva_limit_h: p.evaH, reserve: p.reserve },
+    walkback: { budget_min: Math.round(budget), worst, eva_limit_h: p.evaH, reserve: p.reserve,
+      bad: { factor: bf, budget_min: Math.round(badBudget), worst: worstBad } },
     profile: profile.filter((_, i) => i % step === 0 || i === profile.length - 1),
+    timeline,
+    field: toField(back),
   };
 }

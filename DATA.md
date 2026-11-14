@@ -6,7 +6,8 @@
 | Mars 2020 TRN CTX DTM, 20 m/px | USGS Astrogeology | https://planetarymaps.usgs.gov/mosaic/mars2020_trn/CTX/ | Coarse fallback for quick tests |
 | HiRISE Jezero orthomosaic, 25 cm/px (`JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd`) | USGS / NASA JPL Mars Trek tile service | https://trek.nasa.gov/mars/ | Main map background |
 | CTX Jezero mosaic (`Jezero_CTX_BlockAdj_dd`) | NASA JPL Mars Trek | https://trek.nasa.gov/mars/ | Background option |
-| MOLA colour shaded relief, Viking MDIM 2.1 colour mosaic | NASA JPL Mars Trek | https://trek.nasa.gov/mars/ | Background / zoomed-out context |
+| MOLA colour shaded relief | NASA JPL Mars Trek | https://trek.nasa.gov/mars/ | Background option |
+| Mars Express HRSC + MGS MOLA blended elevation, colour hillshade, 200 m/px (`Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw`) | ESA/DLR/FU Berlin (HRSC) + NASA (MOLA), blend by USGS, served by NASA JPL Mars Trek | https://trek.nasa.gov/mars/ | Zoomed-out context and background option (partner-agency data) |
 | Perseverance waypoints + traverse (MMGIS) | NASA/JPL-Caltech | https://mars.nasa.gov/mmgis-maps/M20/Layers/json/M20_waypoints.json | Stop locations, rover path layer |
 | Perseverance raw images (Navcam, Mastcam-Z, Hazcam) | NASA/JPL-Caltech | https://mars.nasa.gov/mars2020/multimedia/raw-images/ | "What you'll see" photos at each stop |
 | Perseverance MEDA weather summaries | NASA/JPL-Caltech | https://mars.nasa.gov/rss/api/?feed=weather&category=mars2020&feedtype=json | Temperature, pressure, sunrise/sunset |

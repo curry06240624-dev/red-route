@@ -48,6 +48,9 @@ V_FLAT = 0.85         # m/s, suited walking speed on flat ground
 MAX_SLOPE = 15.0      # degrees; steeper ground is treated as impassable
 ROUGH_M = 0.35        # metres of local relief (boulders, ridges) that counts as rough ground
 ROUGH_PENALTY = 3.0   # rough ground takes 3x longer to cross
+VALIDATION_SOLS = (690, 736)  # Perseverance's climb up the delta front, used as a real-world check
+BAD_DAY_FACTOR = 2.0  # "if something goes wrong": walk home at half speed (a hurt or helping crewmate)...
+                      # ...and that contingency return may use the reserve, i.e. the full EVA limit
 EVA_LIMIT_H = 8.0     # hours available for one EVA
 RESERVE = 0.30        # share of the EVA kept in reserve for the walk back
 
@@ -166,6 +169,70 @@ def main():
         t_walk += secs
         dist_total += dist
 
+    # Real-world check: Perseverance's climb from the crater floor to the delta top (sols 690-736).
+    # Plan our own walking route between the rover's start and end points (the planner never sees the
+    # rover track) and measure how far it strays from the path the rover drivers actually chose.
+    validation = None
+    try:
+        sa, sb = VALIDATION_SOLS
+        pa = min(way, key=lambda f: abs(f["properties"]["sol"] - sa))["properties"]
+        pb = min(way, key=lambda f: abs(f["properties"]["sol"] - sb))["properties"]
+        ra, rb = rc_of(pa["lon"], pa["lat"]), rc_of(pb["lon"], pb["lat"])
+        vcum, _ = mcp.find_costs([ra], [rb])
+        vpath = mcp.traceback(rb)
+        ours = np.array([lonlat_of(r, c) for r, c in vpath])
+        trav = json.load(open(os.path.join(RAW, "M20_traverse.json"), encoding="utf-8"))["features"]
+        rover = np.array([c[:2] for f in trav if sa <= (f["properties"].get("sol") or -1) <= sb
+                          for c in f["geometry"]["coordinates"]])
+        k_x = R * math.cos(lat_mid) * math.pi / 180
+        k_y = R * math.pi / 180
+        tx, ty = [], []
+        for i in range(len(rover) - 1):   # densify the rover track to ~1 m so distances are fair
+            n = max(1, int(math.hypot((rover[i + 1, 0] - rover[i, 0]) * k_x, (rover[i + 1, 1] - rover[i, 1]) * k_y)))
+            t = np.linspace(0, 1, n, endpoint=False)
+            tx.append((rover[i, 0] + t * (rover[i + 1, 0] - rover[i, 0])) * k_x)
+            ty.append((rover[i, 1] + t * (rover[i + 1, 1] - rover[i, 1])) * k_y)
+        tx, ty = np.concatenate(tx), np.concatenate(ty)
+        d = np.array([np.min(np.hypot(tx - x * k_x, ty - y * k_y)) for x, y in ours])
+        vlen = sum(math.hypot((ours[i + 1, 0] - ours[i, 0]) * k_x, (ours[i + 1, 1] - ours[i, 1]) * k_y) for i in range(len(ours) - 1))
+        validation = dict(
+            what="Perseverance climb from the crater floor to the delta top",
+            sols=[pa["sol"], pb["sol"]], our_len_m=round(vlen), our_walk_min=round(float(vcum[rb]) / 60, 1),
+            median_m=round(float(np.median(d)), 1), p90_m=round(float(np.percentile(d, 90)), 1), max_m=round(float(d.max()), 1),
+            within_25m_pct=round(float((d <= 25).mean() * 100), 1), within_50m_pct=round(float((d <= 50).mean() * 100), 1),
+            within_100m_pct=round(float((d <= 100).mean() * 100), 1),
+            ours=[[round(x, 6), round(y, 6)] for x, y in ours[::2]],
+            rover=[[round(x, 6), round(y, 6)] for x, y in rover[::2]],
+        )
+        print("validation:", {k: v for k, v in validation.items() if k not in ("ours", "rover")})
+    except Exception as e:
+        print("validation skipped:", e)
+
+    # Check the terrain model against Perseverance's own measurements at its waypoints in the area:
+    # elevation (rover localisation) vs our DTM, and the rover's tilt (IMU) vs our slope.
+    zm, zr, sm, tl = [], [], [], []
+    for f in way:
+        p = f["properties"]
+        if not (AOI["lon0"] < p["lon"] < AOI["lon1"] and AOI["lat0"] < p["lat"] < AOI["lat1"]):
+            continue
+        r, c = rc_of(p["lon"], p["lat"])
+        if not (1 <= r < h - 1 and 1 <= c < w - 1) or np.isnan(dem[r, c]) or p.get("tilt") in (None, -9999.0):
+            continue
+        zm.append(float(dem[r, c])); zr.append(float(p["elev_geoid"]))
+        sm.append(float(np.nanmean(slope[r - 1:r + 2, c - 1:c + 2]))); tl.append(float(p["tilt"]))
+    rover_check = None
+    if len(zm) >= 10:
+        zm, zr, sm, tl = map(np.array, (zm, zr, sm, tl))
+        dz, ds = zm - zr, sm - tl
+        rover_check = dict(
+            n=int(len(zm)),
+            elev_bias_m=round(float(np.median(dz)), 2), elev_mae_m=round(float(np.mean(np.abs(dz - np.median(dz)))), 2),
+            slope_mae_deg=round(float(np.mean(np.abs(ds))), 2), slope_bias_deg=round(float(np.mean(ds)), 2),
+            slope_r=round(float(np.corrcoef(sm, tl)[0, 1]), 3), within_3deg_pct=round(float((np.abs(ds) <= 3).mean() * 100), 1),
+            pairs=[[round(a, 1), round(b, 1)] for a, b in zip(sm, tl)],
+        )
+        print("rover check:", {k: v for k, v in rover_check.items() if k != "pairs"})
+
     # Return-to-base time from every cell (costs are symmetric, so base->cell == cell->base).
     back = MCP_Geometric(cost, fully_connected=True, sampling=(gy, gx))
     ret, _ = back.find_costs([stops["base"]["rc"]])
@@ -183,6 +250,8 @@ def main():
             frac = j / max(1, len(leg_pts) - 1)
             p["t"] = round(leg_start + frac * leg_t, 1)
         leg_start += leg_t + stops[b_id]["dwell_min"]
+    bad_budget = EVA_LIMIT_H * 60
+    worst_bad = dict(margin_min=1e9)
     for i, coords in enumerate(coords_all):
         leg_pts = [p for p in profile if p["leg"] == i]
         for p, (lon, lat) in zip(leg_pts, coords):
@@ -192,6 +261,26 @@ def main():
             margin = budget_min - (p["t"] + back_min)
             if margin < worst["margin_min"]:
                 worst = dict(margin_min=round(margin, 1), lon=lon, lat=lat, t=p["t"], back=round(back_min, 1))
+            margin_bad = bad_budget - (p["t"] + BAD_DAY_FACTOR * back_min)
+            if margin_bad < worst_bad["margin_min"]:
+                worst_bad = dict(margin_min=round(margin_bad, 1), lon=lon, lat=lat, t=p["t"],
+                                 back=round(BAD_DAY_FACTOR * back_min, 1), leg=i)
+
+    # Turn-back time at each stop: the latest moment the crew can leave and still get home inside the budget.
+    timeline, t = [], 0.0
+    for i, sid in enumerate(ROUTE_ORDER):
+        st = stops[sid]
+        if i > 0:
+            t += legs[i - 1]["walk_min"]
+        arrive = t
+        depart = arrive + (st["dwell_min"] if 0 < i < len(ROUTE_ORDER) - 1 else 0)
+        back_min = float(ret_min[st["rc"]])
+        bad_leave = bad_budget - BAD_DAY_FACTOR * back_min
+        timeline.append(dict(id=sid, arrive_min=round(arrive, 1), depart_min=round(depart, 1),
+                             back_min=round(back_min, 1), leave_by_min=round(budget_min - back_min, 1),
+                             spare_min=round(budget_min - back_min - depart, 1),
+                             bad_leave_by_min=round(bad_leave, 1), bad_spare_min=round(bad_leave - depart, 1)))
+        t = depart
 
     dwell = sum(s["dwell_min"] for s in STOPS)
     total_min = t_walk / 60 + dwell
@@ -260,10 +349,12 @@ def main():
         totals=dict(dist_km=round(dist_total / 1000, 2), walk_h=round(t_walk / 3600, 2), dwell_min=dwell,
                     eva_h=round(total_min / 60, 2), gain_m=sum(l["gain_m"] for l in legs),
                     loss_m=sum(l["loss_m"] for l in legs), max_slope=max(l["max_slope"] for l in legs)),
-        walkback=dict(budget_min=round(budget_min), worst=worst, eva_limit_h=EVA_LIMIT_H, reserve=RESERVE),
+        walkback=dict(budget_min=round(budget_min), worst=worst, eva_limit_h=EVA_LIMIT_H, reserve=RESERVE,
+                      bad=dict(factor=BAD_DAY_FACTOR, budget_min=round(bad_budget), worst=worst_bad)),
         assumptions=dict(v_flat_ms=V_FLAT, max_slope_deg=MAX_SLOPE, rough_m=ROUGH_M, rough_penalty=ROUGH_PENALTY,
-                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE),
+                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, bad_day_factor=BAD_DAY_FACTOR),
         profile=profile[::step],
+        validation=validation, rover_check=rover_check, timeline=timeline,
     )
     json.dump(mission, open(os.path.join(OUT, "mission.json"), "w"), separators=(",", ":"))
     print(json.dumps(dict(totals=mission["totals"], legs=legs, walkback=mission["walkback"]), indent=1))
