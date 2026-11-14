@@ -32,25 +32,26 @@ AOI = dict(lon0=77.372, lon1=77.456, lat0=18.444, lat1=18.480)
 
 # Stops sit on Perseverance waypoints (lat/lon from NASA's waypoint file), picked by sol.
 STOPS = [
-    dict(id="base", name="Base camp", sol=395, dwell_min=0,
-         role="Landing zone on the flat crater floor, east of the delta."),
+    dict(id="base", name="Base camp (upper fan)", sol=715, dwell_min=0,
+         role="Flat ground on top of the delta where Perseverance stopped on sol 715."),
     dict(id="depot", name="Three Forks sample depot", sol=670, dwell_min=40,
          role="Retrieve sample tubes Perseverance cached on the crater floor."),
-    dict(id="gap", name="Hawksbill Gap outcrop", sol=477, dwell_min=45,
+    dict(id="gap", name="Hawksbill Gap (Skinner Ridge)", sol=477, dwell_min=45,
          role="Inspect the layered sedimentary rocks of the delta front."),
-    dict(id="top", name="Delta top overlook", sol=736, dwell_min=30,
-         role="Survey the upper fan deposits and photograph the crater floor."),
+    dict(id="top", name="Tenby (upper fan)", sol=736, dwell_min=30,
+         role="Study the curvilinear unit on top of the delta fan."),
 ]
 ROUTE_ORDER = ["base", "depot", "gap", "top", "base"]
 
 # Walking model. These are planning assumptions and are shown in the app next to the results.
-V_FLAT = 0.85         # m/s, suited walking speed on flat ground
+V_FLAT = 0.56         # m/s (2 km/h), NASA's Artemis planning pace for walking EVAs (EVA-EXP-0042 Rev B)
 MAX_SLOPE = 15.0      # degrees; steeper ground is treated as impassable
 ROUGH_M = 0.35        # metres of local relief (boulders, ridges) that counts as rough ground
-ROUGH_PENALTY = 3.0   # rough ground takes 3x longer to cross
+ROUGH_PENALTY = 1.7   # rough ground takes 1.7x longer (Tobler's off-path factor, 0.6x speed)
 VALIDATION_SOLS = (690, 736)  # Perseverance's climb up the delta front, used as a real-world check
 BAD_DAY_FACTOR = 2.0  # "if something goes wrong": walk home at half speed (a hurt or helping crewmate)...
                       # ...and that contingency return may use the reserve, i.e. the full EVA limit
+SUIT_FAIL_MIN = 50.0  # suit failure: walk home on the 1 h backup oxygen (minus ~10 min to get inside)
 EVA_LIMIT_H = 8.0     # hours available for one EVA
 RESERVE = 0.30        # share of the EVA kept in reserve for the walk back
 
@@ -195,12 +196,29 @@ def main():
         tx, ty = np.concatenate(tx), np.concatenate(ty)
         d = np.array([np.min(np.hypot(tx - x * k_x, ty - y * k_y)) for x, y in ours])
         vlen = sum(math.hypot((ours[i + 1, 0] - ours[i, 0]) * k_x, (ours[i + 1, 1] - ours[i, 1]) * k_y) for i in range(len(ours) - 1))
+
+        def steep_along(pts, step=1.0):
+            """Metres of ground steeper than the no-go slope along a path, read from the full-resolution slope grid."""
+            dense = [pts[0]]
+            for i in range(len(pts) - 1):
+                (x0, y0), (x1, y1) = pts[i][:2], pts[i + 1][:2]
+                n = max(1, int(math.hypot((x1 - x0) * k_x, (y1 - y0) * k_y) / step))
+                dense += [(x0 + t * (x1 - x0), y0 + t * (y1 - y0)) for t in np.linspace(0, 1, n + 1)[1:]]
+            dense = np.array(dense)
+            seg = np.hypot(np.diff(dense[:, 0]) * k_x, np.diff(dense[:, 1]) * k_y)
+            s = np.array([slope[min(max(r, 0), h - 1), min(max(c, 0), w - 1)] for r, c in (rc_of(x, y) for x, y in dense)])
+            s = np.nan_to_num(s, nan=0.0)
+            return dict(len_m=round(float(seg.sum())), steep_m=round(float(seg[s[1:] > MAX_SLOPE].sum())),
+                        max_deg=round(float(s.max()), 1), mean_deg=round(float(s.mean()), 1))
+
+        line = np.array([[pa["lon"], pa["lat"]], [pb["lon"], pb["lat"]]])
+        steep = dict(limit_deg=MAX_SLOPE, ours=steep_along(ours), rover=steep_along(rover), line=steep_along(line))
         validation = dict(
             what="Perseverance climb from the crater floor to the delta top",
             sols=[pa["sol"], pb["sol"]], our_len_m=round(vlen), our_walk_min=round(float(vcum[rb]) / 60, 1),
             median_m=round(float(np.median(d)), 1), p90_m=round(float(np.percentile(d, 90)), 1), max_m=round(float(d.max()), 1),
             within_25m_pct=round(float((d <= 25).mean() * 100), 1), within_50m_pct=round(float((d <= 50).mean() * 100), 1),
-            within_100m_pct=round(float((d <= 100).mean() * 100), 1),
+            within_100m_pct=round(float((d <= 100).mean() * 100), 1), steep=steep,
             ours=[[round(x, 6), round(y, 6)] for x, y in ours[::2]],
             rover=[[round(x, 6), round(y, 6)] for x, y in rover[::2]],
         )
@@ -252,6 +270,7 @@ def main():
         leg_start += leg_t + stops[b_id]["dwell_min"]
     bad_budget = EVA_LIMIT_H * 60
     worst_bad = dict(margin_min=1e9)
+    worst_suit = dict(back=-1.0)
     for i, coords in enumerate(coords_all):
         leg_pts = [p for p in profile if p["leg"] == i]
         for p, (lon, lat) in zip(leg_pts, coords):
@@ -265,6 +284,9 @@ def main():
             if margin_bad < worst_bad["margin_min"]:
                 worst_bad = dict(margin_min=round(margin_bad, 1), lon=lon, lat=lat, t=p["t"],
                                  back=round(BAD_DAY_FACTOR * back_min, 1), leg=i)
+            if back_min > worst_suit["back"]:   # suit failure: farthest point from base in walking time
+                worst_suit = dict(back=round(back_min, 1), margin_min=round(SUIT_FAIL_MIN - back_min, 1),
+                                  lon=lon, lat=lat, t=p["t"], leg=i)
 
     # Turn-back time at each stop: the latest moment the crew can leave and still get home inside the budget.
     timeline, t = [], 0.0
@@ -279,8 +301,23 @@ def main():
         timeline.append(dict(id=sid, arrive_min=round(arrive, 1), depart_min=round(depart, 1),
                              back_min=round(back_min, 1), leave_by_min=round(budget_min - back_min, 1),
                              spare_min=round(budget_min - back_min - depart, 1),
-                             bad_leave_by_min=round(bad_leave, 1), bad_spare_min=round(bad_leave - depart, 1)))
+                             bad_leave_by_min=round(bad_leave, 1), bad_spare_min=round(bad_leave - depart, 1),
+                             suit_ok=bool(back_min <= SUIT_FAIL_MIN)))
         t = depart
+
+    # Terrain around each stop (50 m radius) for the stop panel.
+    rad = int(round(50 / a.res))
+    yy, xx = np.ogrid[-rad:rad + 1, -rad:rad + 1]
+    disk = (yy * gy) ** 2 + (xx * gx) ** 2 <= 50 ** 2
+    for st in stops.values():
+        r, c = st["rc"]
+        r0, r1, c0, c1 = max(0, r - rad), min(h, r + rad + 1), max(0, c - rad), min(w, c + rad + 1)
+        m = disk[r0 - (r - rad):r1 - (r - rad), c0 - (c - rad):c1 - (c - rad)]
+        sl, rg, zz = slope[r0:r1, c0:c1][m], rough[r0:r1, c0:c1][m], dem[r0:r1, c0:c1][m]
+        st["terrain"] = dict(radius_m=50, slope_mean=round(float(np.nanmean(sl)), 1), slope_max=round(float(np.nanmax(sl)), 1),
+                             rough_rms=round(float(np.nanmean(rg)), 2), elev_min=round(float(np.nanmin(zz)), 1),
+                             elev_max=round(float(np.nanmax(zz)), 1),
+                             nogo_pct=round(float(np.mean(sl > MAX_SLOPE) * 100), 1))
 
     dwell = sum(s["dwell_min"] for s in STOPS)
     total_min = t_walk / 60 + dwell
@@ -350,9 +387,10 @@ def main():
                     eva_h=round(total_min / 60, 2), gain_m=sum(l["gain_m"] for l in legs),
                     loss_m=sum(l["loss_m"] for l in legs), max_slope=max(l["max_slope"] for l in legs)),
         walkback=dict(budget_min=round(budget_min), worst=worst, eva_limit_h=EVA_LIMIT_H, reserve=RESERVE,
-                      bad=dict(factor=BAD_DAY_FACTOR, budget_min=round(bad_budget), worst=worst_bad)),
+                      bad=dict(factor=BAD_DAY_FACTOR, budget_min=round(bad_budget), worst=worst_bad),
+                      suit=dict(limit_min=SUIT_FAIL_MIN, worst=worst_suit)),
         assumptions=dict(v_flat_ms=V_FLAT, max_slope_deg=MAX_SLOPE, rough_m=ROUGH_M, rough_penalty=ROUGH_PENALTY,
-                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, bad_day_factor=BAD_DAY_FACTOR),
+                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, bad_day_factor=BAD_DAY_FACTOR, suit_fail_min=SUIT_FAIL_MIN),
         profile=profile[::step],
         validation=validation, rover_check=rover_check, timeline=timeline,
     )

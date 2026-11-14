@@ -7,16 +7,53 @@
 
 Run after build_layers.py:  py -3.12 tools/fetch_context.py
 """
+import io
 import json
 import os
 import urllib.request
 from datetime import date, timedelta
 
+from PIL import Image, ImageStat
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "raw")
 OUT = os.path.join(ROOT, "docs", "data")
 UA = {"User-Agent": "red-route-hackathon/1.0"}
-CAMERAS = ("NAVCAM_LEFT", "MCZ_LEFT", "FRONT_HAZCAM_LEFT_A", "MCZ_RIGHT", "NAVCAM_RIGHT")
+# Left eyes only: the right Mastcam-Z / Navcam frames are near copies of the left ones.
+CAMERAS = ("MCZ_LEFT", "NAVCAM_LEFT", "FRONT_HAZCAM_LEFT_A", "SUPERCAM_RMI", "REAR_HAZCAM_LEFT", "SHERLOC_WATSON")
+PHOTOS_PER_STOP = 16
+
+
+def useful(data):
+    """Skip dark frames (sun pointing, night) and flat frames (sky, calibration); return a 16x16 hash for duplicates."""
+    im = Image.open(io.BytesIO(data)).convert("L")
+    st = ImageStat.Stat(im)
+    px = list(im.resize((16, 16), Image.BILINEAR).tobytes())
+    avg = sum(px) / len(px)
+    return st.mean[0] >= 50 and st.stddev[0] >= 20, tuple(p > avg for p in px)
+
+
+def near_copy(bits, kept):
+    return any(sum(a != b for a, b in zip(bits, k)) < 26 for k in kept)   # under ~10 % of the hash differs
+
+# What Perseverance did at each stop, written from NASA/JPL sources (checked 2026-11-14).
+NOTES = {
+    "base": dict(text="Perseverance stopped here on sol 715, after climbing back onto the delta through Jenkins Gap "
+                      "(it left Jenkins Gap on sol 710) on its way to Tenby during the Upper Fan campaign.",
+                 sources=[["NASA blog: Journey to Tenby!", "https://science.nasa.gov/blogs/journey-to-tenby"]]),
+    "depot": dict(text="Perseverance left 10 sample tubes here between sol 653 (21 Dec 2022) and sol 690 (28 Jan 2023), "
+                       "laid in a zigzag 5-15 m apart on flat ground near the base of the delta, as a backup cache for sample return.",
+                  sources=[["JPL: Perseverance completes Mars sample depot", "https://www.jpl.nasa.gov/news/nasas-perseverance-rover-completes-mars-sample-depot/"],
+                           ["NASA: Three Forks sample depot map", "https://science.nasa.gov/resource/perseverances-three-forks-sample-depot-map/"]]),
+    "gap": dict(text="Hawksbill Gap was the rover's way up the layered rocks of the delta front during the Delta Front Campaign "
+                     "(from sol 415). It tried an abrasion at Hogwallow Flats on sol 471 and worked at Skinner Ridge over sols 477-496.",
+                sources=[["NASA blog: Next stop, Hawksbill Gap", "https://science.nasa.gov/blog/next-stop-hawksbill-gap"],
+                         ["Williams et al., LPSC 2023: Delta Front Campaign overview", "https://ntrs.nasa.gov/api/citations/20230000588/downloads/Williams%20et%20al_LPSC%202023%20Delta%20Front%20Overview%20abstract_v5.pdf"]]),
+    "top": dict(text="Perseverance reached Tenby on sol 733 (13 Mar 2023) to study the curvilinear unit on top of the fan, "
+                     "part of the Upper Fan campaign.",
+                sources=[["NASA blog: Journey to Tenby!", "https://science.nasa.gov/blogs/journey-to-tenby"],
+                         ["NASA blog: Exploring the upper fan", "https://science.nasa.gov/blogs/up-and-soon-away-perseverance-continues-exploring-the-upper-fan/"]]),
+}
 
 
 def get_json(url):
@@ -26,7 +63,7 @@ def get_json(url):
 
 def raw_images(sol, want=6):
     picks = []
-    for page in range(4):
+    for page in range(8):
         d = get_json(f"https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json"
                      f"&sol={sol}&num=100&page={page}")
         for im in d.get("images", []):
@@ -38,17 +75,21 @@ def raw_images(sol, want=6):
                                   date=im.get("date_taken_utc", ""), sol=sol, link=im.get("link", "")))
         if len(d.get("images", [])) < 100:
             break
-    # prefer a mix of cameras, colour Mastcam-Z first
-    picks.sort(key=lambda p: (CAMERAS.index(p["cam"]), p["date"]))
-    seen, out = set(), []
-    for p in picks:
-        key = (p["cam"], p["title"][:40])
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(p)
-        if len(out) >= want:
-            break
+    # round-robin over cameras so the gallery mixes Navcam, Mastcam-Z, Hazcam and close-ups
+    by_cam = {}
+    for p in sorted(picks, key=lambda p: p["date"]):
+        by_cam.setdefault(p["cam"], []).append(p)
+    for cam in by_cam:   # spread picks across the sol instead of taking a burst of near-identical frames
+        lst = by_cam[cam]
+        step = max(1, len(lst) // 6)
+        by_cam[cam] = lst[::step]
+    out = []
+    while len(out) < want and any(by_cam.values()):
+        for cam in CAMERAS:
+            if by_cam.get(cam):
+                out.append(by_cam[cam].pop(0))
+                if len(out) >= want:
+                    break
     return out
 
 
@@ -70,28 +111,42 @@ def main():
     # Local copies of the photos for the team (kept outside the repo, next to red-route/).
     archive = os.path.join(os.path.dirname(ROOT), "nasa_data", "rover_photos")
     for st in mission["stops"]:
-        sols = [st["rover_sol"] + k for k in (0, -1, 1, -2, 2)]
-        pics = []
-        for s in sols:
-            if len(pics) >= 6:
-                break
-            try:
-                pics += raw_images(s, 6 - len(pics))
-            except Exception as e:  # keep going; the app shows what it has
-                print("raw images failed for sol", s, e)
-        st["photos"] = pics
+        sols = [st["rover_sol"] + k for k in (0, -1, 1, -2, 2, -3, 3)]
         folder = os.path.join(archive, f"{st['id']}_sol{st['rover_sol']}")
         os.makedirs(folder, exist_ok=True)
-        for p in pics:
-            dest = os.path.join(folder, os.path.basename(p["medium"]))
-            if not os.path.exists(dest):
+        pics, hashes, skipped = [], [], 0
+        for s in sols:
+            if len(pics) >= PHOTOS_PER_STOP:
+                break
+            try:
+                cands = raw_images(s, 48)
+            except Exception as e:  # keep going; the app shows what it has
+                print("raw images failed for sol", s, e)
+                continue
+            for p in cands:
+                if len(pics) >= PHOTOS_PER_STOP:
+                    break
+                dest = os.path.join(folder, os.path.basename(p["medium"]))
                 try:
-                    req = urllib.request.Request(p["medium"], headers=UA)
-                    open(dest, "wb").write(urllib.request.urlopen(req, timeout=60).read())
+                    if os.path.exists(dest):
+                        data = open(dest, "rb").read()
+                    else:
+                        data = urllib.request.urlopen(urllib.request.Request(p["medium"], headers=UA), timeout=60).read()
+                    ok, bits = useful(data)
                 except Exception as e:
-                    print("photo download failed", p["medium"], e)
+                    print("photo check failed", p["medium"], e)
+                    continue
+                if not ok or near_copy(bits, hashes):
+                    skipped += 1
+                    continue
+                if not os.path.exists(dest):
+                    open(dest, "wb").write(data)
+                pics.append(p)
+                hashes.append(bits)
+        st["photos"] = pics
+        st["notes"] = NOTES.get(st["id"])
         json.dump(pics, open(os.path.join(folder, "photos.json"), "w"), indent=1)
-        print(st["name"], "sol", st["rover_sol"], "photos", len(pics))
+        print(st["name"], "sol", st["rover_sol"], "photos", len(pics), "skipped (dark, flat or repeat)", skipped)
     json.dump(mission, open(mission_path, "w"), separators=(",", ":"))
 
     try:

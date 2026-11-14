@@ -137,6 +137,26 @@ function snap(cost, r, c) {
 }
 
 const zOf = (i) => G.dem[i] * G.z_scale + G.z_offset;
+
+/* terrain within 50 m of a cell, for the stop panel after a stop is moved */
+function terrainAround(i, maxSlope) {
+  const W = G.w, H = G.h, r0 = Math.floor(i / W), c0 = i % W;
+  const rr = Math.ceil(50 / G.gy), rc = Math.ceil(50 / G.gx);
+  let n = 0, sSum = 0, sMax = 0, rough = 0, zMin = Infinity, zMax = -Infinity, nogo = 0;
+  for (let dr = -rr; dr <= rr; dr++) for (let dc = -rc; dc <= rc; dc++) {
+    const r = r0 + dr, c = c0 + dc;
+    if (r < 0 || r >= H || c < 0 || c >= W || (dr * G.gy) ** 2 + (dc * G.gx) ** 2 > 2500) continue;
+    const k = r * W + c;
+    if (G.slope[k] === 255) continue;
+    const s = G.slope[k] * G.slope_scale, z = zOf(k);
+    n++; sSum += s; sMax = Math.max(sMax, s); rough += G.rough[k] * G.rough_scale;
+    zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); if (s > maxSlope) nogo++;
+  }
+  if (!n) return null;
+  const r1 = (x) => Math.round(x * 10) / 10;
+  return { radius_m: 50, slope_mean: r1(sSum / n), slope_max: r1(sMax), rough_rms: Math.round((rough / n) * 100) / 100,
+    elev_min: r1(zMin), elev_max: r1(zMax), nogo_pct: r1((nogo / n) * 100) };
+}
 const lonlat = (i) => [G.lon0 + ((i % G.w) + 0.5) * G.dlon, G.lat1 - (Math.floor(i / G.w) + 0.5) * G.dlat];
 
 function plan(p, stops, order) {
@@ -184,12 +204,14 @@ function plan(p, stops, order) {
   }
   const budget = p.evaH * 60 * (1 - p.reserve);
   const badBudget = p.evaH * 60, bf = p.badFactor || 2;   // bad day: half speed home, reserve may be used
-  let worst = { margin_min: 1e9 }, worstBad = { margin_min: 1e9 };
+  const suitLimit = p.suitMin || 50;   // suit failure: get home on the 1 h backup oxygen
+  let worst = { margin_min: 1e9 }, worstBad = { margin_min: 1e9 }, worstSuit = { back: -1 };
   profile.forEach((q, i) => {
     const m = budget - (q.t + q.back);
     if (m < worst.margin_min) worst = { margin_min: Math.round(m * 10) / 10, t: q.t, back: q.back, lon: where[i][0], lat: where[i][1] };
     const mb = badBudget - (q.t + bf * q.back);
     if (mb < worstBad.margin_min) worstBad = { margin_min: Math.round(mb * 10) / 10, t: q.t, back: Math.round(bf * q.back * 10) / 10, lon: where[i][0], lat: where[i][1], leg: q.leg };
+    if (q.back > worstSuit.back) worstSuit = { back: q.back, margin_min: Math.round((suitLimit - q.back) * 10) / 10, t: q.t, lon: where[i][0], lat: where[i][1], leg: q.leg };
   });
   // turn-back time at each stop
   const timeline = [];
@@ -202,7 +224,8 @@ function plan(p, stops, order) {
     timeline.push({ id, arrive_min: Math.round(arrive * 10) / 10, depart_min: Math.round(depart * 10) / 10,
       back_min: Math.round(backMin * 10) / 10, leave_by_min: Math.round((budget - backMin) * 10) / 10,
       spare_min: Math.round((budget - backMin - depart) * 10) / 10,
-      bad_leave_by_min: Math.round(badLeave * 10) / 10, bad_spare_min: Math.round((badLeave - depart) * 10) / 10 });
+      bad_leave_by_min: Math.round(badLeave * 10) / 10, bad_spare_min: Math.round((badLeave - depart) * 10) / 10,
+      suit_ok: backMin <= suitLimit });
     t = depart;
   });
   const walkMin = legs.reduce((s, l) => s + l.walk_min, 0);
@@ -210,13 +233,15 @@ function plan(p, stops, order) {
   const step = Math.max(1, Math.floor(profile.length / 700));
   return {
     legs,
-    stopCells: Object.fromEntries(Object.entries(cell).map(([id, i]) => [id, { lonlat: lonlat(i), z: Math.round(zOf(i) * 10) / 10 }])),
+    stopCells: Object.fromEntries(Object.entries(cell).map(([id, i]) => [id, { lonlat: lonlat(i), z: Math.round(zOf(i) * 10) / 10,
+      terrain: terrainAround(i, p.maxSlope) }])),
     totals: { dist_km: Math.round(dTot / 10) / 100, walk_h: Math.round((walkMin / 60) * 100) / 100, dwell_min: dwellMin,
       eva_h: Math.round(((walkMin + dwellMin) / 60) * 100) / 100,
       gain_m: legs.reduce((s, l) => s + l.gain_m, 0), loss_m: legs.reduce((s, l) => s + l.loss_m, 0),
       max_slope: Math.max(...legs.map((l) => l.max_slope)) },
     walkback: { budget_min: Math.round(budget), worst, eva_limit_h: p.evaH, reserve: p.reserve,
-      bad: { factor: bf, budget_min: Math.round(badBudget), worst: worstBad } },
+      bad: { factor: bf, budget_min: Math.round(badBudget), worst: worstBad },
+      suit: { limit_min: suitLimit, worst: worstSuit } },
     profile: profile.filter((_, i) => i % step === 0 || i === profile.length - 1),
     timeline,
     field: toField(back),

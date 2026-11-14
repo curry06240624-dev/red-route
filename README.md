@@ -10,25 +10,32 @@ of the walk, the crew must be able to get back to base camp inside the EVA time 
 ## The mission in the demo: "Delta Front Sample Run"
 | Stop | Where (Perseverance waypoint) | Why go there |
 |---|---|---|
-| B | Base camp on the crater floor (sol 395) | Flat, open landing zone |
+| B | Base camp on the upper fan (sol 715) | Flat ground on top of the delta |
 | 1 | Three Forks sample depot (sol 670) | Retrieve the sample tubes Perseverance cached |
-| 2 | Hawksbill Gap outcrop (sol 477) | Layered sedimentary rocks of the delta front |
-| 3 | Delta top overlook (sol 736) | Upper fan deposits and a view over the crater |
+| 2 | Hawksbill Gap, Skinner Ridge (sol 477) | Layered sedimentary rocks of the delta front |
+| 3 | Tenby, upper fan (sol 736) | The curvilinear unit on top of the delta fan |
 
 ## Layers
-- **Optical:** HiRISE 25 cm orthomosaic of Jezero (USGS, served by NASA JPL Mars Trek), plus CTX, MOLA and Viking backgrounds.
+- **Optical:** HiRISE 25 cm orthomosaic of Jezero (USGS, served by NASA JPL Mars Trek), plus CTX, MOLA and ESA Mars Express HRSC backgrounds.
 - **Topographic:** slope and rough ground computed from the 1 m HiRISE elevation model (USGS Mars 2020 TRN DTM).
-- **Safety:** walk-back time to base camp from every point, and the planned route coloured by slope.
-- **Surface view:** Perseverance Navcam, Mastcam-Z and Hazcam images taken at each stop, so the crew knows what to expect.
+- **Safety:** three get-home checks, a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, and the 50-minute backup-oxygen line.
+- **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
 - **Conditions:** NASA DONKI space-weather notices (live) and Perseverance MEDA weather summaries.
 - **Context:** Perseverance's real traverse.
 
 ## How the route is found
 1. Slope and roughness come from the HiRISE DTM on a 2 m grid, corrected for the equirectangular projection (x is stretched by 1/cos(latitude)).
-2. Each cell gets a walking time from a Tobler-style hiking function scaled to suited walking (0.85 m/s on flat ground).
-3. Ground steeper than 15° is no-go. Rough ground (local relief above 0.35 m) takes 3× longer.
-4. A least-cost path search (scikit-image `MCP_Geometric`) links the stops. A second search from base camp gives the walk-back time from every cell.
-5. The plan passes if elapsed time + walk-back time stays inside the EVA budget (8 h, with 30 % reserve) at every point.
+2. Each cell gets a walking time from a Tobler-style hiking function scaled to suited walking (0.56 m/s, NASA's 2 km/h planning pace, on flat ground).
+3. Ground steeper than 15° is no-go. Rough ground (local relief above 0.35 m) takes 1.7× longer.
+4. A least-cost path search (scikit-image `MCP_Geometric`) links the stops. A second search from base camp gives the walk-home time from every cell.
+5. The plan must pass three checks at every point of the walk:
+   - **Plan fits:** time so far + walk home at normal pace ≤ 8 h minus a 30 % reserve.
+   - **If something goes wrong:** time so far + walk home at half speed ≤ 8 h.
+   - **Suit failure:** walk home ≤ 50 min (1 h of backup oxygen).
+
+## Real-world checks
+- Our slope map agrees with Perseverance's own tilt sensor at 189 rover stops: 1.27° average difference, 94 % within 3°.
+- On the rover's climb to the delta top (sols 693–736), a straight line would cross 150 m of slopes steeper than 15°; our planned walk crosses none (`tools/rover_check.py` draws the map).
 
 These are planning assumptions for a hackathon prototype, not NASA flight rules. They are listed in the app under "How it works".
 
@@ -41,6 +48,7 @@ curl -L -o raw/M20_traverse.json https://mars.nasa.gov/mmgis-maps/M20/Layers/jso
 # 2. build layers + route, then photos/weather/space weather
 python tools/build_layers.py --dtm hirise --res 2
 python tools/fetch_context.py
+python tools/rover_check.py
 # 3. serve the web app
 python -m http.server 8765 --directory docs
 ```
@@ -49,8 +57,9 @@ Python packages: numpy, scipy, scikit-image, rasterio, pillow.
 ## Use of AI tools
 The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
 first version of the site, the science stops and the route rules; the team reviewed and approved them and
-asked for later changes. All data shown in the app come from NASA, USGS and ESA. The app itself uses no
-AI-generated images.
+asked for later changes. All data shown in the app come from NASA, USGS and ESA. The mission badge (logo)
+is an AI-generated image (Higgsfield) and is labelled as AI-generated in the app; no other AI-generated
+images are used.
 
 ## License
 Apache-2.0 (see LICENSE). NASA and USGS data keep their own terms; see DATA.md.
