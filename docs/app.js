@@ -42,7 +42,7 @@
   let baseKey = "hirise";
   BASES.hirise.layer.addTo(map);
 
-  const S = { m: null, base: null, overlays: {}, markers: {}, sel: "top", donki: null, meda: null, routeLine: null, routeCasing: null };
+  const S = { m: null, base: null, overlays: {}, markers: {}, sel: "depot", donki: null, meda: null, routeLine: null, routeCasing: null };
   window.RedRoute = { map, S };
 
   const getJSON = (f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.json());   // always check for a newer build
@@ -69,8 +69,9 @@
 
   function fitRoute() {
     const b = S.routeLine.getBounds();
+    for (const s of S.m.stops) b.extend([s.lat, s.lon]);   // optional stops too, so they can be seen and ticked on
     if (isMobile()) map.fitBounds(b, { padding: [20, 20] });
-    else map.fitBounds(b, { paddingTopLeft: [350, 90], paddingBottomRight: [420, 170] });
+    else map.fitBounds(b, { paddingTopLeft: [350, 90], paddingBottomRight: [470, 170] });
   }
 
   /* ---------- stops, numbering and names ---------- */
@@ -89,17 +90,19 @@
   /* ---------- the three get-home checks ---------- */
   function getChecks(m) {
     const wb = m.walkback, out = [];
-    const w = wb.worst;
+    const w = wb.worst, air = wb.airlock_min || 0, homeBy = `T+${hm(wb.budget_min)}`;
+    // the time for walking and stops: the suit limit, minus the reserve, minus the time to get out and back in
+    const how = `${wb.eva_limit_h} h suit limit minus ${Math.round(wb.reserve * 100)} % reserve${air ? ` minus ${air % 60 ? fmtMin(air) : `${air / 60} h`} to get out and back in` : ""}`;
     out.push({ key: "plan", name: "Plan fits", ok: w.margin_min >= 0,
       val: `${w.margin_min >= 0 ? "PASS" : "FAIL"} ${sgn(w.margin_min)}${fmtMin(w.margin_min)}`,
-      sub: w.margin_min >= 0 ? `Home at normal pace inside the usable ${hm(wb.budget_min)} (${wb.eva_limit_h} h minus ${Math.round(wb.reserve * 100)} % reserve)`
-        : `Over by ${fmtMin(w.margin_min)} near ${nearestStopName(w.lat, w.lon)} at T+${hm(w.t)}. Leave earlier, shorten a stop or drop one.` });
+      sub: w.margin_min >= 0 ? `Home at normal pace by ${homeBy} (${how})`
+        : `Over by ${fmtMin(w.margin_min)} near ${nearestStopName(w.lat, w.lon)} at T+${hm(w.t)}: the crew must be home by ${homeBy} (${how}). Leave earlier, shorten a stop or drop one.` });
     if (wb.bad) {
-      const b = wb.bad.worst;
+      const b = wb.bad.worst, badBy = `T+${hm(wb.bad.budget_min)}`;
       out.push({ key: "bad", name: "If something goes wrong", ok: b.margin_min >= 0,
         val: `${b.margin_min >= 0 ? "PASS" : "FAIL"} ${sgn(b.margin_min)}${fmtMin(b.margin_min)}`,
-        sub: b.margin_min >= 0 ? `Home at half speed (crewmate hurt), may use the reserve, before ${wb.eva_limit_h} h`
-          : `At T+${hm(b.t)} near ${nearestStopName(b.lat, b.lon)} a half-speed walk home takes ${fmtMin(b.back)}: ${fmtMin(b.margin_min)} past ${wb.eva_limit_h} h. Leave that stop earlier or change the stop order.` });
+        sub: b.margin_min >= 0 ? `Home by ${badBy} even at half speed (crewmate hurt), from any point of the walk. The reserve stays untouched.`
+          : `At T+${hm(b.t)} near ${nearestStopName(b.lat, b.lon)} a half-speed walk home takes ${fmtMin(b.back)}: ${fmtMin(b.margin_min)} past ${badBy}. Leave that stop earlier, shorten a stop or drop one.` });
     }
     if (wb.suit) {
       const s = wb.suit.worst, lim = wb.suit.limit_min, ok = s.back <= lim;
@@ -112,15 +115,19 @@
   }
 
   function renderChecks() {
-    const m = S.m, t = m.totals, rc = m.rover_check;
+    const m = S.m, t = m.totals, rc = m.rover_check, air = m.walkback.airlock_min || 0;
     const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span></div>`).join("");
     $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
-      <div class="mission">${t.dist_km.toFixed(1)} KM · ${fmtMin(t.eva_h * 60).toUpperCase()} EVA · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°</div>
+      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}</div>
       ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots. <a href="#" id="proofLink">See the test</a></div>` : ""}
       <hr class="r">`;
     const pl = $("#proofLink");
     if (pl) pl.onclick = (e) => { e.preventDefault(); openModal("about"); setTimeout(() => $("#tests")?.scrollIntoView(), 50); };
   }
+
+  // "Leave by" = the latest time to turn for home that keeps both time checks green (the half-speed rule is the stricter one)
+  const leaveBy = (t) => (t.bad_leave_by_min != null ? Math.min(t.leave_by_min, t.bad_leave_by_min) : t.leave_by_min);
+  const leaveSpare = (t) => (t.bad_spare_min != null ? Math.min(t.spare_min, t.bad_spare_min) : t.spare_min);
 
   function renderStopList() {
     const m = S.m, tl = m.timeline || [];
@@ -130,9 +137,9 @@
       if (last) {
         html += `<li class="ret"><span class="n">${i + 1}</span><span class="nm">Back at base camp</span><span class="lb"><span class="lbl">Arrive</span><b>${t ? `T+${hm(t.arrive_min)}` : ""}</b></span></li>`;
       } else {
-        const late = t && t.spare_min < 0;
+        const spare = t ? leaveSpare(t) : 0, late = t && spare < 0;
         const right = i === 0 ? `<span class="lbl">Start</span><b>T+0:00</b>`
-          : `${late ? '<span class="lbl bad">Late</span>' : ""}<b class="${late ? "bad" : t && t.spare_min < 30 ? "warn" : ""}">${t ? `T+${hm(t.leave_by_min)}` : ""}</b>`;
+          : `${late ? '<span class="lbl bad">Late</span>' : ""}<b class="${late ? "bad" : t && spare < 30 ? "warn" : ""}">${t ? `T+${hm(leaveBy(t))}` : ""}</b>`;
         html += `<li data-id="${id}" class="${S.sel === id ? "sel" : ""}"><span class="n">${numberOf(id)}</span><span class="nm">${esc(s.name)}</span><span class="lb">${right}</span></li>`;
       }
     });
@@ -190,7 +197,7 @@
       const w = S.meda.sols[S.meda.sols.length - 1];
       const [rh, rm] = w.sunrise.split(":").map(Number), [sh, sm] = w.sunset.split(":").map(Number);
       const day = ((sh * 60 + sm) - (rh * 60 + rm) - 120) / 60, fits = day >= S.m.totals.eva_h;
-      html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h EVA · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
+      html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
     $("#conditions").innerHTML = html;
   }
@@ -281,7 +288,9 @@
         ${t.bad_leave_by_min != null ? `<tr><td>Leave by · if something goes wrong</td><td class="${t.bad_spare_min < 0 ? "bad" : ""}">T+${hm(t.bad_leave_by_min)} (${sgn(t.bad_spare_min)}${fmtMin(t.bad_spare_min)})</td></tr>` : ""}
         <tr><td>On site</td><td>T+${hm(t.arrive_min)} – T+${hm(t.depart_min)}</td></tr>`;
     }
-    html += `</table><div class="drag-hint">Drag the stop on the map to move it. The route and every check update live.</div>`;
+    if (i < 0) html += `<tr><td>On this walk</td><td>No</td></tr>`;
+    html += `</table><div class="drag-hint">${i < 0 ? "This stop is not on the walk. Tick it under Plan your EVA to add it: the checks show at once if the plan still fits."
+      : "Drag the stop on the map to move it. The route and every check update live."}</div>`;
     const box = $("#right");
     box.innerHTML = html;
     box.querySelectorAll(".grid6 button").forEach((b) => (b.onclick = () => openLightbox(s, +b.dataset.k)));
@@ -376,8 +385,8 @@
   const TL = { pad: { l: 16, r: 18, t: 8 }, axisY: 22, stopY: 44, profTop: 62 };
   function tlScale() {
     const svg = $("#tlSvg"), W = svg.clientWidth || 900, H = svg.clientHeight || 130;
-    const P = S.m.profile, lim = S.m.walkback.eva_limit_h * 60;
-    const Tmax = Math.max(lim, Math.ceil(P[P.length - 1].t / 60) * 60);   // stretch the axis if the walk runs past the EVA limit
+    const P = S.m.profile, wb = S.m.walkback, lim = wb.eva_limit_h * 60 - (wb.airlock_min || 0);   // the suit limit on the walk clock (T+0 = first step outside)
+    const Tmax = Math.max(Math.ceil(lim / 60) * 60, Math.ceil(P[P.length - 1].t / 60) * 60);   // whole hours; longer if the walk runs past the suit limit
     return { svg, W, H, Tmax, lim, X: (t) => TL.pad.l + (Math.max(0, Math.min(Tmax, t)) / Tmax) * (W - TL.pad.l - TL.pad.r) };
   }
   function drawTimeline() {
@@ -395,14 +404,14 @@
       g += `<text x="${x}" y="${TL.axisY - 8}" fill="#a3a9b1" font-size="11" font-family="Barlow Semi Condensed" letter-spacing="1.2" text-anchor="${h === 0 ? "start" : h === Tmax / 60 ? "end" : "middle"}">T+${h}:00</text>`;
     }
     g += `<line x1="${X(0)}" x2="${X(Tmax)}" y1="${TL.axisY}" y2="${TL.axisY}" stroke="rgba(255,255,255,.35)"/>`;
-    // usable budget marker (plan fits) and EVA end
+    // the time the crew must be home by, and the suit limit if the walk runs past it
     const xb = X(m.walkback.budget_min);
     g += `<line x1="${xb}" x2="${xb}" y1="${TL.axisY}" y2="${H - 6}" stroke="#fbbf24" stroke-dasharray="3 3" opacity=".6"/>`;
-    g += `<text x="${xb + 4}" y="${TL.stopY + 4}" fill="#fbbf24" font-size="10" font-family="Barlow Semi Condensed" letter-spacing="1">USABLE ${hm(m.walkback.budget_min)}</text>`;
-    if (Tmax > lim) {
+    g += `<text x="${xb + 4}" y="${TL.stopY + 4}" fill="#fbbf24" font-size="10" font-family="Barlow Semi Condensed" letter-spacing="1">HOME BY T+${hm(m.walkback.budget_min)}</text>`;
+    if (P[P.length - 1].t > lim) {
       const xl = X(lim);
       g += `<line x1="${xl}" x2="${xl}" y1="${TL.axisY}" y2="${H - 6}" stroke="#f87171" stroke-dasharray="3 3"/>`;
-      g += `<text x="${xl + 4}" y="${TL.stopY + 16}" fill="#f87171" font-size="10" font-family="Barlow Semi Condensed" letter-spacing="1">EVA LIMIT ${hm(lim)}</text>`;
+      g += `<text x="${xl + 4}" y="${TL.stopY + 16}" fill="#f87171" font-size="10" font-family="Barlow Semi Condensed" letter-spacing="1">SUIT LIMIT T+${hm(lim)}</text>`;
     }
     // stops on the clock
     (m.timeline || []).forEach((t, i) => {
@@ -551,7 +560,7 @@
     const ctx = zone.canvas.getContext("2d");
     if (!zone.img) zone.img = ctx.createImageData(w, h);
     const px = zone.img.data, f = zone.field, n = w * h;
-    const thrBad = ((wb.eva_limit_h * 60 - T) / bf) * 10, thrN = (wb.budget_min - T) * 10;
+    const thrBad = (((wb.bad ? wb.bad.budget_min : wb.budget_min) - T) / bf) * 10, thrN = (wb.budget_min - T) * 10;
     for (let i = 0; i < n; i++) {
       const o = i * 4, v = f[i];
       px[o + 3] = 0;
@@ -610,7 +619,7 @@
 
     const back = st.after ? 0 : st.p.back + ((st.q.back ?? st.p.back) - st.p.back) * st.f;
     const Tm = st.after ? m.profile[m.profile.length - 1].t : T;   // once home, the margins stay at their arrival values
-    const mPlan = wb.budget_min - (Tm + back), mBad = wb.eva_limit_h * 60 - (Tm + bf * back);
+    const mPlan = wb.budget_min - (Tm + back), mBad = (wb.bad ? wb.bad.budget_min : wb.budget_min) - (Tm + bf * back);
     const leg = st.gap ? st.q.leg : st.p.leg;
     const nextS = stopById(m.order[leg + 1] || "base");
     const here = st.gap ? stopById(m.order[st.q.leg]) : null;
@@ -620,7 +629,7 @@
     else if (here) {
       const tl = (m.timeline || [])[st.q.leg];
       whereLbl = "On site"; whereVal = shortName(here).toUpperCase();
-      if (tl) whereSub = `Leave by T+${hm(tl.leave_by_min)}`;
+      if (tl) whereSub = `Leave by T+${hm(leaveBy(tl))}`;
     } else {
       whereLbl = "Next stop";
       whereVal = `${shortName(nextS).toUpperCase()} · ${(dist / 1000).toFixed(2)} KM ${compass(bearing(pos, [nextS.lat, nextS.lon]))}`;
@@ -829,7 +838,7 @@
       const leg = st.gap ? st.q.leg : st.p.leg;
       if (here) {
         const tl = (m.timeline || [])[st.q.leg];
-        if (tl) $("#aSite").textContent = `At ${shortName(here)}: leave by T+${hm(tl.leave_by_min)}`;
+        if (tl) $("#aSite").textContent = `At ${shortName(here)}: leave by T+${hm(leaveBy(tl))}`;
       }
       const legEnd = astro.legEnd[leg] ?? st.d, along = Math.max(0, legEnd - st.d);
       aheadPts = routeSlice(st.d, Math.min(legEnd, st.d + 120));
@@ -875,8 +884,9 @@
       ${sl("roughPenalty", "Rough ground slows you", 1, 3, 0.1, a.rough_penalty, "×")}
       ${sl("evaH", "EVA time limit", 4, 10, 0.5, a.eva_limit_h, " h")}
       ${sl("reserve", "Reserve", 0, 50, 5, Math.round(a.reserve * 100), " %")}
+      ${sl("airlock", "Airlock time (out and back in)", 0, 150, 5, a.airlock_min || 0, " min")}
       <div class="lbl-lg" style="margin-top:12px">Stops</div>
-      ${m.stops.filter((s) => s.id !== "base").map((s) => `<label class="tog"><input type="checkbox" data-stop="${s.id}" checked> ${esc(s.name)}</label>`).join("")}
+      ${m.stops.filter((s) => s.id !== "base").map((s) => `<label class="tog"><input type="checkbox" data-stop="${s.id}" ${m.order.includes(s.id) ? "checked" : ""}> ${esc(s.name)}${m.order.includes(s.id) ? "" : " (optional)"}</label>`).join("")}
       <div class="planbar"><button class="ghost" id="resetPlan">Reset</button><span id="planStatus">Default plan · ${m.grid_m} m grid</span></div>`;
     box.querySelectorAll("input[type=range]").forEach((inp) => (inp.oninput = () => {
       inp.closest(".sl").querySelector("output").textContent = inp.value + inp.dataset.unit;
@@ -891,14 +901,14 @@
     const v = (k) => parseFloat(document.querySelector(`#sl-${k}`).value);
     const a = S.base.assumptions;
     return { maxSlope: v("maxSlope"), vFlat: v("vFlat"), roughPenalty: v("roughPenalty"), roughM: a.rough_m,
-      evaH: v("evaH"), reserve: v("reserve") / 100, badFactor: a.bad_day_factor || 2, suitMin: a.suit_fail_min || 50 };
+      evaH: v("evaH"), reserve: v("reserve") / 100, airlockMin: v("airlock"), badFactor: a.bad_day_factor || 2, suitMin: a.suit_fail_min || 50 };
   }
 
   function initWorker(m) {
     if (!m.grid || !window.Worker) return;
     Promise.all(["grid_slope.u8", "grid_rough.u8", "grid_dem.i16"].map((f) => fetch(`data/${f}`, { cache: "no-cache" }).then((r) => r.arrayBuffer())))
       .then(([slope, rough, dem]) => {
-        worker = new Worker("router.js?v=7");
+        worker = new Worker("router.js?v=8");
         worker.onmessage = onWorker;
         worker.postMessage({ type: "init", grid: m.grid, slope, rough, dem }, [slope, rough, dem]);
       }).catch(() => {});
@@ -942,7 +952,7 @@
     m.order = [...new Set(r.legs.map((l) => l.frm))].concat(["base"]);
     m.legs = r.legs.map(({ coords, ...l }) => l);
     m.totals = r.totals; m.walkback = r.walkback; m.profile = r.profile; m.timeline = r.timeline;
-    m.assumptions = Object.assign({}, m.assumptions, { v_flat_ms: p.vFlat, max_slope_deg: p.maxSlope, rough_penalty: p.roughPenalty, eva_limit_h: p.evaH, reserve: p.reserve });
+    m.assumptions = Object.assign({}, m.assumptions, { v_flat_ms: p.vFlat, max_slope_deg: p.maxSlope, rough_penalty: p.roughPenalty, eva_limit_h: p.evaH, reserve: p.reserve, airlock_min: p.airlockMin });
     for (const s of m.stops) {
       const c = r.stopCells[s.id];
       if (c) { s.lon = c.lonlat[0]; s.lat = c.lonlat[1]; s.elev_m = c.z; if (c.terrain && (s.moved || !s.terrain)) s.terrain = c.terrain; }
@@ -956,7 +966,7 @@
   }
   function resetPlan() {
     const b = clone(S.base);
-    S.m = b; S.sel = "top";
+    S.m = b; S.sel = "depot";
     pause(); zone.active = false; eva.T = 0;
     for (const k of ["marker", "pulse", "tight"]) if (eva[k]) map.removeLayer(eva[k]);
     eva.tightKey = null;
@@ -1040,8 +1050,8 @@
       <p>Red Route plans a walking EVA in Jezero Crater and checks, at every minute of the walk, that the crew can still get home.</p>
       <h3>The get-home checks</h3>
       <table><tr><th>Check</th><th>Rule</th><th>Where the rule comes from</th></tr>
-        <tr><td>Plan fits</td><td>Time so far + walk home at normal pace ≤ ${a.eva_limit_h} h minus ${Math.round(a.reserve * 100)} % reserve</td><td>NASA plans about 6 h inside an 8 h suit (<a href="https://www.nasa.gov/wp-content/uploads/2017/02/eva-exp-0042_xeva_system_con_ops_rev_b_final_dtd_10192020_ref_doc.pdf" target="_blank" rel="noopener">EVA-EXP-0042</a>)</td></tr>
-        <tr><td>If something goes wrong</td><td>Time so far + walk home at half speed ≤ ${a.eva_limit_h} h (the reserve may be used)</td><td>Our assumption, built on NASA's walk-back idea (<a href="https://ttu-ir.tdl.org/handle/2346/74208" target="_blank" rel="noopener">EVA walk-back limit study</a>) and rescue of a hurt crewmate (<a href="https://ntrs.nasa.gov/citations/20230005461" target="_blank" rel="noopener">NASA NTRS 20230005461</a>)</td></tr>
+        <tr><td>Plan fits</td><td>Time so far + walk home at normal pace ≤ ${a.eva_limit_h} h minus ${Math.round(a.reserve * 100)} % reserve minus ${a.airlock_min || 0} min of airlock time (getting out and back in)</td><td>NASA plans about 6 h inside an 8 h suit (<a href="https://www.nasa.gov/wp-content/uploads/2017/02/eva-exp-0042_xeva_system_con_ops_rev_b_final_dtd_10192020_ref_doc.pdf" target="_blank" rel="noopener">EVA-EXP-0042</a>)</td></tr>
+        <tr><td>If something goes wrong</td><td>Time so far + walk home at half speed must fit the same time. The reserve stays untouched.</td><td>Our assumption, built on NASA's walk-back idea (<a href="https://ttu-ir.tdl.org/handle/2346/74208" target="_blank" rel="noopener">EVA walk-back limit study</a>) and rescue of a hurt crewmate (<a href="https://ntrs.nasa.gov/citations/20230005461" target="_blank" rel="noopener">NASA NTRS 20230005461</a>)</td></tr>
         <tr><td>Suit failure</td><td>Walk home ≤ ${a.suit_fail_min || 50} min from every point (1 h backup oxygen, ~10 min to get inside)</td><td>NASA sizes walking EVAs on the backup oxygen (<a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a>)</td></tr></table>
       <h3>How the route is found</h3>
       <ol><li>Slope and rough ground come from the 1 m HiRISE elevation model of Jezero (USGS, Mars 2020 landing products), corrected for the map projection.</li>
@@ -1054,8 +1064,9 @@
         <tr><td>No-go slope</td><td>${a.max_slope_deg}°</td><td>NASA suit requirement is 20°; Apollo crews walked on slopes under 15° (<a href="https://meetingorganizer.copernicus.org/EPSC2024/EPSC2024-196.html" target="_blank" rel="noopener">Iqbal et al. 2024</a>)</td></tr>
         <tr><td>Speed on slopes</td><td>× exp(−3.5 tan slope)</td><td>Tobler's hiking function, tested on analog missions (<a href="https://discovery.ucl.ac.uk/id/eprint/10201492/1/1-s2.0-S0094576524007501-main.pdf" target="_blank" rel="noopener">Goodwin et al. 2024</a>)</td></tr>
         <tr><td>Rough ground</td><td>&gt; ${a.rough_m} m relief, ${a.rough_penalty}× slower</td><td>Tobler's off-path factor; HiRISE misses rocks under about 1.5 m (<a href="https://marsoweb.nas.nasa.gov/landingsites/msl/workshops/4th_workshop/talks/Golombek_Rocks_4th_Wkshp.pdf" target="_blank" rel="noopener">Golombek</a>)</td></tr>
-        <tr><td>EVA limit</td><td>${a.eva_limit_h} h, ${Math.round(a.reserve * 100)} % reserve</td><td>NASA suit design limit (EVA-EXP-0042)</td></tr></table>
-      <p style="font-size:12px;color:#6f7680">Half speed after an accident and using the reserve on a bad day are our planning assumptions, not NASA flight rules.</p>
+        <tr><td>EVA limit</td><td>${a.eva_limit_h} h, ${Math.round(a.reserve * 100)} % reserve</td><td>NASA suit design limit (EVA-EXP-0042)</td></tr>
+        <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr></table>
+      <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} stops inside our area our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}

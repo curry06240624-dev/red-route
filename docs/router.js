@@ -208,8 +208,9 @@ function plan(p, stops, order) {
     fTot += flat;
     tStart += walkMin + (k + 1 < order.length - 1 ? dwell[order[k + 1]] : 0);
   }
-  const budget = p.evaH * 60 * (1 - p.reserve);
-  const badBudget = p.evaH * 60, bf = p.badFactor || 2;   // bad day: half speed home, reserve may be used
+  const usable = p.evaH * 60 * (1 - p.reserve), airlock = p.airlockMin || 0;
+  const budget = usable - airlock;   // time left for walking and stops (T+0 is the first step outside)
+  const badBudget = budget, bf = p.badFactor || 2;   // bad day: the half-speed walk home must fit the same time
   const suitLimit = p.suitMin || 50;   // suit failure: get home on the 1 h backup oxygen
   let worst = { margin_min: 1e9 }, worstBad = { margin_min: 1e9 }, worstSuit = { back: -1 };
   // On the way home, time + walk-home stays the same from point to point, so many points tie for "tightest".
@@ -248,7 +249,7 @@ function plan(p, stops, order) {
       eva_h: Math.round(((walkMin + dwellMin) / 60) * 100) / 100,
       gain_m: legs.reduce((s, l) => s + l.gain_m, 0), loss_m: legs.reduce((s, l) => s + l.loss_m, 0),
       max_slope: Math.max(...legs.map((l) => l.max_slope)) },
-    walkback: { budget_min: Math.round(budget), worst, eva_limit_h: p.evaH, reserve: p.reserve,
+    walkback: { budget_min: Math.round(budget), usable_min: Math.round(usable), airlock_min: airlock, worst, eva_limit_h: p.evaH, reserve: p.reserve,
       bad: { factor: bf, budget_min: Math.round(badBudget), worst: worstBad },
       suit: { limit_min: suitLimit, worst: worstSuit } },
     // thinned for drawing, but the first and last point of every leg (the stops) are always kept

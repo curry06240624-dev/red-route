@@ -43,7 +43,9 @@ STOPS = [
     dict(id="top", name="Tenby (upper fan)", sol=736, dwell_min=30,
          role="Study the curvilinear unit on top of the delta fan."),
 ]
-ROUTE_ORDER = ["base", "depot", "gap", "top", "base"]
+# The default walk. Tenby is an optional stop: it is on the map and can be ticked on in the app, but with it the
+# plan does not pass the time checks once the airlock time is counted, so the default walk leaves it out.
+ROUTE_ORDER = ["base", "depot", "gap", "base"]
 
 # Walking model. These are planning assumptions and are shown in the app next to the results.
 V_FLAT = 0.56         # m/s (2 km/h), NASA's Artemis planning pace for walking EVAs (EVA-EXP-0042 Rev B)
@@ -51,11 +53,13 @@ MAX_SLOPE = 15.0      # degrees; steeper ground is treated as impassable
 ROUGH_M = 0.35        # metres of local relief (boulders, ridges) that counts as rough ground
 ROUGH_PENALTY = 1.7   # rough ground takes 1.7x longer (Tobler's off-path factor, 0.6x speed)
 VALIDATION_SOLS = (690, 736)  # Perseverance's climb up the delta front, used as a real-world check
-BAD_DAY_FACTOR = 2.0  # "if something goes wrong": walk home at half speed (a hurt or helping crewmate)...
-                      # ...and that contingency return may use the reserve, i.e. the full EVA limit
+BAD_DAY_FACTOR = 2.0  # "if something goes wrong": walk home at half speed (a hurt or helping crewmate).
+                      # That slow walk must still end inside the usable time; the reserve stays untouched.
 SUIT_FAIL_MIN = 50.0  # suit failure: walk home on the 1 h backup oxygen (minus ~10 min to get inside)
 EVA_LIMIT_H = 8.0     # hours available for one EVA
 RESERVE = 0.30        # share of the EVA kept in reserve for the walk back
+AIRLOCK_MIN = 120.0   # suit time that is not walking or working at a stop. The Artemis III EVA study timeline has
+                      # 45 min to get out (egress), 30 min of dust removal and 45 min to get back in (ingress).
 
 
 def lonlat_to_xy(lon, lat):
@@ -266,7 +270,8 @@ def main():
     ret_min = ret / 60.0
 
     # Walk-back check along the planned EVA: elapsed time + time to get home must stay inside the budget.
-    budget_min = EVA_LIMIT_H * 60 * (1 - RESERVE)
+    usable_min = EVA_LIMIT_H * 60 * (1 - RESERVE)   # suit time the plan may use
+    budget_min = usable_min - AIRLOCK_MIN            # what is left for walking and stops (T+0 is the first step outside)
     elapsed = 0.0
     worst = dict(margin_min=1e9)
     leg_start = 0.0
@@ -275,7 +280,7 @@ def main():
             if p["leg"] == i:   # time at each point = the route search's own walking time, not an even spread
                 p["t"] = round(leg_start + p.pop("ts") / 60, 1)
         leg_start += legs[i]["walk_min"] + stops[b_id]["dwell_min"]
-    bad_budget = EVA_LIMIT_H * 60
+    bad_budget = budget_min   # the half-speed walk home must fit the same time
     worst_bad = dict(margin_min=1e9)
     worst_suit = dict(back=-1.0)
     for i, (coords, path) in enumerate(zip(coords_all, paths_all)):
@@ -339,7 +344,7 @@ def main():
                                        over5_pct=round(float(np.mean(sl > 5) * 100), 1))
     print("base camp, 100 m circle:", stops["base"]["site_check"])
 
-    dwell = sum(s["dwell_min"] for s in STOPS)
+    dwell = sum(stops[sid]["dwell_min"] for sid in ROUTE_ORDER[1:-1])   # only the stops on the walk
     total_min = t_walk / 60 + dwell
 
     # Keep the photos and notes that fetch_context.py added on an earlier run (same stop, same rover sol), so a
@@ -419,11 +424,13 @@ def main():
         totals=dict(dist_km=round(dist_total / 1000, 2), walk_h=round(t_walk / 3600, 2), dwell_min=dwell,
                     eva_h=round(total_min / 60, 2), gain_m=sum(l["gain_m"] for l in legs),
                     loss_m=sum(l["loss_m"] for l in legs), max_slope=max(l["max_slope"] for l in legs)),
-        walkback=dict(budget_min=round(budget_min), worst=worst, eva_limit_h=EVA_LIMIT_H, reserve=RESERVE,
+        walkback=dict(budget_min=round(budget_min), usable_min=round(usable_min), airlock_min=AIRLOCK_MIN,
+                      worst=worst, eva_limit_h=EVA_LIMIT_H, reserve=RESERVE,
                       bad=dict(factor=BAD_DAY_FACTOR, budget_min=round(bad_budget), worst=worst_bad),
                       suit=dict(limit_min=SUIT_FAIL_MIN, worst=worst_suit)),
         assumptions=dict(v_flat_ms=V_FLAT, max_slope_deg=MAX_SLOPE, rough_m=ROUGH_M, rough_penalty=ROUGH_PENALTY,
-                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, bad_day_factor=BAD_DAY_FACTOR, suit_fail_min=SUIT_FAIL_MIN),
+                         eva_limit_h=EVA_LIMIT_H, reserve=RESERVE, airlock_min=AIRLOCK_MIN,
+                         bad_day_factor=BAD_DAY_FACTOR, suit_fail_min=SUIT_FAIL_MIN),
         profile=thin,
         validation=validation, rover_check=rover_check, timeline=timeline,
     )

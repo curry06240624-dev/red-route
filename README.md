@@ -13,7 +13,7 @@ of the walk, the crew must be able to get back to base camp inside the EVA time 
 | B | Base camp on the upper fan (sol 715) | Flat ground on top of the delta |
 | 1 | Three Forks sample depot (sol 670) | Retrieve the sample tubes Perseverance cached |
 | 2 | Hawksbill Gap, Skinner Ridge (sol 477) | Layered sedimentary rocks of the delta front |
-| 3 | Tenby, upper fan (sol 736) | The curvilinear unit on top of the delta fan |
+| optional | Tenby, upper fan (sol 736) | The curvilinear unit on top of the delta fan. Not on the default walk: with it the plan fails the time checks once the airlock time is counted. It can be ticked on in the app. |
 
 Base camp was placed on top of the delta so that the loop fits the time rules. It is not checked as a landing site:
 within 100 m the ground reaches 19.5° on our 2 m slope grid, and the Artemis III EVA study we cite draws a 100 m
@@ -33,8 +33,9 @@ landing circle with slopes under 5°.
 3. Ground steeper than 15° is no-go. Rough ground (local relief above 0.35 m) takes 1.7× longer.
 4. A least-cost path search (scikit-image `MCP_Geometric`) links the stops. A second search from base camp gives the walk-home time from every cell.
 5. The plan must pass three checks at every point of the walk:
-   - **Plan fits:** time so far + walk home at normal pace ≤ 8 h minus a 30 % reserve.
-   - **If something goes wrong:** time so far + walk home at half speed ≤ 8 h.
+   - **Plan fits:** time so far + walk home at normal pace ≤ 8 h minus a 30 % reserve minus 2 h of airlock time
+     (45 min to get out, 30 min of dust removal and 45 min to get back in, as in the Artemis III EVA study timeline).
+   - **If something goes wrong:** time so far + walk home at half speed must fit the same time. The reserve stays untouched.
    - **Suit failure:** walk home ≤ 50 min (1 h of backup oxygen).
 
 ## Real-world checks
