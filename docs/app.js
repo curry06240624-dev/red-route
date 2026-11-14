@@ -65,7 +65,7 @@
     refreshDonki();
   }).catch((e) => { console.error(e); $("#checks").innerHTML = '<div class="bad">Could not load the mission data.</div>'; });
 
-  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); }
+  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } }
 
   function fitRoute() {
     const b = S.routeLine.getBounds();
@@ -261,6 +261,9 @@
     if (s.notes && !s.moved) {
       html += `<hr class="r"><div class="lbl-lg">What Perseverance did here</div><p class="note">${esc(s.notes.text)}</p>
         <div class="src">${s.notes.sources.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join(" · ")}</div>`;
+      if (s.id === "base" && s.site_check) {
+        html += `<p class="note">Base camp was placed here, on top of the delta, so that the loop fits the time rules. It is not checked as a landing site: within ${s.site_check.radius_m} m the ground reaches ${s.site_check.slope_max}°.</p>`;
+      }
     } else if (s.moved) {
       html += `<hr class="r"><p class="note">You moved this stop. The photos show where Perseverance stopped on sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m away` : ""}.</p>`;
     }
@@ -505,6 +508,8 @@
     const label = mode === "pause" ? "Pause" : mode === "replay" ? "Walk it again" : "Walk the plan";
     playBtn.innerHTML = `<span class="${mode === "pause" ? "sq" : "tri"}"></span><span class="pl">${label}</span><span class="gnum" aria-hidden="true">2</span>`;
     playBtn.setAttribute("aria-label", label);
+    const ap = $("#aPlay");
+    if (ap) ap.innerHTML = `<span class="${mode === "pause" ? "sq" : "tri"}"></span><span>${label}</span>`;
   }
 
   function setField(field) {
@@ -631,6 +636,7 @@
       <div><span class="lbl">If something goes wrong</span><b class="${mBad < 0 ? "bad" : "ok"}">${sgn(mBad)}${fmtMin(mBad)}</b></div>
       <div><span class="lbl">Plan fits</span><b class="${mPlan < 0 ? "bad" : mPlan < 30 ? "warn" : "ok"}">${sgn(mPlan)}${fmtMin(mPlan)}</b></div>
       ${alarm ? '<div class="alarm-txt">TURN BACK</div>' : ""}`;
+    renderAstro({ T, back, mPlan, mBad, lim, st, here, nextS, dist, pos });
   }
 
   function play() {
@@ -658,6 +664,201 @@
     const P = S.m && S.m.profile;
     setPlayBtn(P && eva.T >= P[P.length - 1].t ? "replay" : "play");
   }
+
+  /* ---------- v2: Astronaut view, the crew's own screen ----------
+     One status word, two big numbers and an arrow, readable at a glance; buttons sized for gloves.
+     Driven by the same EVA clock as the map, so it shows exactly what the plan predicts. */
+  const astro = { open: false, legEnd: [] };
+  function astroEnd() { const tl = S.m.timeline || []; return tl.length ? tl[tl.length - 1].arrive_min : S.m.profile[S.m.profile.length - 1].t; }
+
+  // The route between two distances along the walk (metres), for the "your way" line on the small map.
+  function routeSlice(d0, d1) {
+    const toRad = Math.PI / 180, out = [];
+    let acc = 0, prev = null;
+    for (const layer of S.routeLine.getLayers()) for (const ll of layer.getLatLngs()) {
+      if (prev) {
+        const dy = (ll.lat - prev.lat) * toRad * R_MARS, dx = (ll.lng - prev.lng) * toRad * R_MARS * Math.cos(ll.lat * toRad);
+        const seg = Math.hypot(dx, dy), a = acc, b = acc + seg;
+        if (seg > 0 && b >= d0 && a <= d1) {
+          const f0 = Math.max(0, (d0 - a) / seg), f1 = Math.min(1, (d1 - a) / seg);
+          if (!out.length) out.push([prev.lat + (ll.lat - prev.lat) * f0, prev.lng + (ll.lng - prev.lng) * f0]);
+          out.push([prev.lat + (ll.lat - prev.lat) * f1, prev.lng + (ll.lng - prev.lng) * f1]);
+        }
+        acc = b;
+        if (acc > d1) return out;
+      }
+      prev = ll;
+    }
+    return out;
+  }
+
+  /* small moving map in the astronaut view: follows the crew and turns so the walking direction is up
+     (like car navigation; tap the N button for north up). Shows the route ahead and the steep ground. */
+  const amap = { map: null, lastPan: 0, hdg: null, northUp: false };
+  // The map element is a square as big as the frame's diagonal, so turning it never shows empty corners.
+  function sizeAstroMap() {
+    const wrap = $("#aMapWrap"), el = $("#aMap");
+    const d = Math.ceil(Math.hypot(wrap.clientWidth, wrap.clientHeight));
+    el.style.width = `${d}px`; el.style.height = `${d}px`;
+    if (amap.map) amap.map.invalidateSize();
+  }
+  // Turn the map toward the walking direction. Smooth while the clock plays, jump when scrubbing.
+  function steerAstroMap(target) {
+    if (target == null || !isFinite(target)) target = amap.hdg ?? 0;
+    if (amap.hdg == null || !eva.playing) amap.hdg = target;
+    else { const diff = ((target - amap.hdg + 540) % 360) - 180; amap.hdg = (amap.hdg + diff * 0.12 + 360) % 360; }
+    const rot = amap.northUp ? 0 : amap.hdg, el = $("#aMap");
+    el.style.transform = `translate(-50%, -50%) rotate(${-rot}deg)`;
+    el.style.setProperty("--hdg", `${rot}deg`);
+    $("#aNorth").style.transform = `rotate(${-rot}deg)`;
+    $("#aNorth").classList.toggle("fixed", amap.northUp);
+    return rot;
+  }
+  $("#aNorth").onclick = () => { amap.northUp = !amap.northUp; steerAstroMap(amap.hdg); if (astro.open) setTime(eva.T); };
+  window.addEventListener("resize", () => { if (astro.open) sizeAstroMap(); });
+  function initAstroMap() {
+    sizeAstroMap();
+    if (amap.map) { amap.map.invalidateSize(); return; }
+    amap.map = L.map("aMap", { crs: L.CRS.EPSG4326, zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, zoomSnap: 0.5 });
+    L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"), { maxNativeZoom: 8, maxZoom: 19, className: "ctx-relief" }).addTo(amap.map);
+    L.tileLayer(trekUrl("JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd", "png"), { maxNativeZoom: 17, maxZoom: 19, bounds: JEZ_HIRISE }).addTo(amap.map);
+    L.imageOverlay("data/slope.png", S.m.overlay_bounds, { interactive: false }).addTo(amap.map);
+    const b = stopById("base");
+    amap.map.setView([b.lat, b.lon], 15.5);
+    amap.map.on("zoomend moveend", astroScale);
+  }
+  function drawAstroRoute() {
+    if (!amap.map) return;
+    for (const k of ["casing", "route"]) if (amap[k]) amap.map.removeLayer(amap[k]);
+    (amap.stops || []).forEach((l) => amap.map.removeLayer(l));
+    const gj = S.routeLine.toGeoJSON();
+    amap.casing = L.geoJSON(gj, { style: { color: "#0b0b0b", weight: 11, opacity: 0.7 }, interactive: false }).addTo(amap.map);
+    amap.route = L.geoJSON(gj, { style: { color: "#ff6a3d", weight: 5 }, interactive: false }).addTo(amap.map);
+    amap.stops = S.m.order.slice(0, -1).map((id) => { const s = stopById(id); return L.marker([s.lat, s.lon], { icon: markerIcon(s), interactive: false, keyboard: false }).addTo(amap.map); });
+    if (amap.ahead) amap.ahead.bringToFront();
+    if (amap.crew) amap.crew.bringToFront();
+  }
+  function updateAstroMap(pos, aheadPts) {
+    if (!amap.map) return;
+    if (!amap.crew) {
+      amap.ahead = L.polyline([], { color: "#ffffff", weight: 7, opacity: 0.95, lineCap: "round", interactive: false }).addTo(amap.map);
+      amap.crew = L.circleMarker(pos, { radius: 10, color: "#fff", weight: 3, fillColor: "#38bdf8", fillOpacity: 1, interactive: false }).addTo(amap.map);
+    }
+    amap.ahead.setLatLngs(aheadPts && aheadPts.length > 1 ? aheadPts : []).bringToFront();
+    amap.crew.setLatLng(pos).bringToFront();
+    const now = performance.now();
+    if (now - amap.lastPan > 100) { amap.map.setView(pos, amap.map.getZoom(), { animate: false }); amap.lastPan = now; }
+  }
+  function astroScale() {
+    if (!amap.map) return;
+    const c = amap.map.getCenter(), a = amap.map.latLngToContainerPoint(c), b = amap.map.latLngToContainerPoint([c.lat, c.lng + 0.01]);
+    const mPerPx = (((Math.PI * R_MARS) / 180) * Math.cos((c.lat * Math.PI) / 180) * 0.01) / Math.max(1e-6, Math.abs(b.x - a.x));
+    const len = [50, 100, 200, 500, 1000].find((x) => x / mPerPx >= 70) || 1000;
+    $("#aScaleBar").style.width = `${Math.round(len / mPerPx)}px`;
+    $("#aScaleTxt").textContent = len >= 1000 ? `${len / 1000} km` : `${len} m`;
+  }
+  $("#aZin").onclick = () => amap.map && amap.map.setZoom(Math.min(18, amap.map.getZoom() + 0.5));
+  $("#aZout").onclick = () => amap.map && amap.map.setZoom(Math.max(13, amap.map.getZoom() - 0.5));
+
+  function renderAstroTrack() {
+    astro.legEnd = [];
+    for (const p of S.m.profile) astro.legEnd[p.leg] = p.d;   // distance along the walk where each leg ends
+    const tl = S.m.timeline || [], end = astroEnd();
+    const pct = (t) => Math.max(0, Math.min(100, (t / end) * 100));
+    let h = '<div class="trk-line"></div><div class="trk-done" id="aDone"></div>';
+    tl.forEach((t, i) => {
+      const last = i === tl.length - 1;
+      const name = i === 0 ? "1 BASE" : last ? `${tl.length} HOME` : `${i + 1} ${shortName(stopById(t.id)).toUpperCase()}`;
+      h += `<div class="trk-stop" style="left:${pct(t.arrive_min)}%"><i></i><em>${esc(name)}</em></div>`;
+    });
+    $("#aTrack").innerHTML = `${h}<div class="trk-crew" id="aCrew"></div>`;
+  }
+  function openAstro() {
+    if (!S.m) return;
+    closeGuide();
+    for (const id of ["layersPanel", "planPanel", "about"]) document.getElementById(id).hidden = true;
+    syncNav();
+    astro.open = true;
+    $("#astro").hidden = false;
+    document.body.classList.add("astro-on");
+    renderAstroTrack();
+    initAstroMap();
+    drawAstroRoute();
+    setTime(eva.T || 0);
+    astroScale();
+    $("#astro").scrollTop = 0;
+    $("#aPlay").focus({ preventScroll: true });   // keep the status word in view on phones
+  }
+  function closeAstro() {
+    astro.open = false;
+    $("#astro").hidden = true;
+    document.body.classList.remove("astro-on");
+  }
+  function renderAstro(n) {
+    if (!astro.open) return;
+    const { T, back, mPlan, mBad, lim, st, here, nextS, dist, pos } = n;
+    const m = S.m;
+    $("#aMet").textContent = `T+${hm(T)}`;
+    let cls = "", word = "GO", spare = `${fmtMin(mPlan)} to spare`;
+    if (st.after) { word = "HOME"; spare = `EVA complete at T+${hm(m.profile[m.profile.length - 1].t)}`; }
+    else if (mPlan < 0 || mBad < 0 || back > lim) {
+      cls = "bad"; word = "TURN BACK NOW";
+      spare = back > lim ? `Walk home is ${Math.round(back)} min, more than the ${lim} min of backup oxygen`
+        : mPlan < 0 ? `${fmtMin(mPlan)} past the plan's time limit` : "No time left if a crewmate gets hurt";
+    } else if (mPlan < 30) { cls = "warn"; word = "HEAD HOME SOON"; spare = `Only ${fmtMin(mPlan)} to spare`; }
+    $("#aStatus").className = `astro-status ${cls}`;
+    $("#aWord").textContent = word;
+    $("#aSpare").textContent = spare;
+    $("#aBad").innerHTML = st.after ? "" : `If a crewmate gets hurt: <b class="${mBad < 0 ? "bad" : ""}">${fmtMin(mBad)} ${mBad < 0 ? "short" : "to spare"}</b>`;
+    // walk home, measured against the 50 min of backup oxygen
+    $("#aBack").textContent = `${Math.round(back)} MIN`;
+    $("#aBack").className = back > lim ? "bad" : "";
+    $("#aO2").style.width = `${Math.min(100, (back / lim) * 100)}%`;
+    $("#aO2bar").className = `o2bar ${back > lim ? "bad" : back > lim * 0.8 ? "warn" : ""}`;
+    $("#aO2txt").textContent = back > lim ? `Beyond the ${lim} min of backup oxygen` : `Inside the ${lim} min of backup oxygen`;
+    // where to go next: along the planned route, never a straight line (a straight line can cross no-go slopes)
+    const arrow = $("#aArrow");
+    $("#aSite").textContent = "";
+    let aheadPts = null;
+    if (st.after) {
+      $("#aNextLbl").textContent = "Status"; $("#aNext").textContent = "BASE CAMP"; $("#aNextSub").textContent = "Crew is back inside";
+      arrow.style.display = "none";
+      steerAstroMap(null);
+    } else {
+      const leg = st.gap ? st.q.leg : st.p.leg;
+      if (here) {
+        const tl = (m.timeline || [])[st.q.leg];
+        if (tl) $("#aSite").textContent = `At ${shortName(here)}: leave by T+${hm(tl.leave_by_min)}`;
+      }
+      const legEnd = astro.legEnd[leg] ?? st.d, along = Math.max(0, legEnd - st.d);
+      aheadPts = routeSlice(st.d, Math.min(legEnd, st.d + 120));
+      const tgt = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 60)) : [nextS.lat, nextS.lon];
+      const brg = bearing(pos, tgt);
+      // walking direction = the route over the next 25 m; the map turns so this points up
+      const near = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 25)) : tgt;
+      const rot = steerAstroMap(bearing(pos, near));
+      $("#aNextLbl").textContent = nextS.id === "base" ? "Heading home" : "Next stop";
+      $("#aNext").textContent = shortName(nextS).toUpperCase();
+      $("#aNextSub").textContent = `${along >= 1000 ? `${(along / 1000).toFixed(2)} km` : `${Math.round(along)} m`} along the route · ${compass(brg)}`;
+      arrow.style.display = "";
+      arrow.style.transform = `rotate(${brg - rot}deg)`;   // relative to the map: up = straight ahead, leans before a bend
+    }
+    updateAstroMap(pos, aheadPts);
+    const p = `${Math.max(0, Math.min(100, (T / astroEnd()) * 100))}%`;
+    const crew = $("#aCrew"), done = $("#aDone");
+    if (crew) crew.style.left = p;
+    if (done) done.style.width = p;
+  }
+  $("#astroBtn").onclick = openAstro;
+  $("#aExit").onclick = closeAstro;
+  $("#aPlay").onclick = () => (eva.playing ? pause() : play());
+  $("#aTrack").addEventListener("click", (e) => {
+    if (!S.m) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    pause();
+    setTime(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * astroEnd());
+  });
 
   /* ---------- live re-planning (web worker) ---------- */
   const DEFAULT_ORDER = ["base", "depot", "gap", "top", "base"];
@@ -812,6 +1013,7 @@
   $("#lbClose").onclick = () => ($("#lightbox").hidden = true);
   $("#lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") $("#lightbox").hidden = true; });
   document.addEventListener("keydown", (e) => {
+    if (astro.open) { if (e.key === "Escape") closeAstro(); return; }
     if (!$("#lightbox").hidden) { if (e.key === "ArrowRight") step(1); if (e.key === "ArrowLeft") step(-1); if (e.key === "Escape") $("#lightbox").hidden = true; return; }
     if (e.key === "Escape") { closeGuide(); for (const id of ["layersPanel", "planPanel", "about"]) document.getElementById(id).hidden = true; syncNav(); }
     if (e.key === " " && e.target === document.body) { e.preventDefault(); eva.playing ? pause() : play(); }
@@ -833,6 +1035,7 @@
 
   function renderAbout(m) {
     const a = m.assumptions, rc = m.rover_check, v = m.validation;
+    const base = m.stops.find((s) => s.id === "base"), sc = base.site_check;
     $("#aboutBody").innerHTML = `<h2>How Red Route works</h2>
       <p>Red Route plans a walking EVA in Jezero Crater and checks, at every minute of the walk, that the crew can still get home.</p>
       <h3>The get-home checks</h3>
@@ -863,7 +1066,7 @@
         <li>The walking curve is Earth-calibrated. Real suited speed depends on the suit, the load and fatigue.</li>
         <li>Solar-particle alerts come from sensors near Earth. Eruption (CME) alerts include Mars arrival times.</li>
         <li>The public MEDA weather summaries end in 2024, so the daylight check uses the latest available sols.</li>
-        <li>Base camp sits on flat ground (slopes up to ${(m.stops.find((s) => s.id === "base").terrain || {}).slope_max}° within 50 m), but landing-zone size and rocket-plume distance from the sample depot are not checked.</li></ul>
+        <li>Base camp was placed on top of the delta so that the loop fits the time rules. It is not checked as a landing site${sc ? `: the ground is gentle within 50 m (up to ${(base.terrain || {}).slope_max}°), but within ${sc.radius_m} m it reaches ${sc.slope_max}°, and the <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> we cite draws a 100 m landing circle with slopes under 5°` : ""}. The rocket-plume distance from the sample depot is not checked either.</li></ul>
       <h3>Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
@@ -872,6 +1075,6 @@
         <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service; if it does not answer, the app shows a saved copy and its date.</li>
         <li>Software: Leaflet map library (BSD 2-Clause licence); Barlow fonts (SIL Open Font License). The full list is in DATA.md in the repo.</li></ul>
       <h3>Use of AI tools</h3>
-      <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The mission badge is an AI-generated image (Higgsfield). All map and rover data are from NASA, USGS and ESA.</p>`;
+      <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The logo is drawn by our code from our own terrain map and the planned walk; until 14 Nov 2026 the site used an AI-generated badge (Higgsfield), which was replaced. All map and rover data are from NASA, USGS and ESA.</p>`;
   }
 })();

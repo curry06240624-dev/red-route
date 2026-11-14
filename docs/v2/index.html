@@ -4,118 +4,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- v2 (with Astronaut view) shares the data, photos and worker of the main site one folder up -->
-<base href="../">
 <title>Red Route · Marswalk planner</title>
-<meta name="description" content="Plan a Marswalk in Jezero Crater and check, at every step, that the crew can still get home. Built on NASA, USGS and ESA data.">
-<link rel="icon" type="image/png" href="favicon_64.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="v2/style.css?v=6">
+<meta name="robots" content="noindex">
+<!-- Red Route now has one address. This page only forwards old /v2/ links to it. -->
+<meta http-equiv="refresh" content="0; url=../">
+<script>location.replace("../" + location.search + location.hash);</script>
+<style>body { margin: 0; padding: 40px 16px; background: #0b0b0b; color: #f1f2f3; font: 16px/1.5 system-ui, sans-serif; text-align: center; } a { color: #ff6a3d; }</style>
 </head>
 <body>
-<div id="map" aria-label="Map of Jezero Crater, Mars"></div>
-
-<header class="brand pnl">
-  <div class="badge-wrap">
-    <img src="badge_88.png" srcset="badge_176.png 2x" alt="Red Route mission badge (AI-generated image)" width="46" height="46">
-  </div>
-  <div class="brand-name">RED ROUTE</div>
-  <div class="brand-sub"><span class="t">MARSWALK PLANNER<br>JEZERO CRATER, MARS</span><span class="ai-tag">BADGE: AI-GENERATED IMAGE</span></div>
-</header>
-
-<nav class="topnav pnl" aria-label="Panels">
-  <button data-open="layersPanel">LAYERS</button>
-  <button data-open="planPanel"><span class="gnum" aria-hidden="true">3</span>PLAN YOUR EVA</button>
-  <button data-open="about">HOW IT WORKS</button>
-  <button class="help" id="helpBtn" aria-label="How to use Red Route" title="How to use">?</button>
-</nav>
-
-<div class="guide pnl" id="guide" role="dialog" aria-labelledby="guideTitle" hidden>
-  <div class="lbl-lg" id="guideTitle">How to use Red Route</div>
-  <p class="guide-lead">Plan a walk on Mars and check, at every step, that the crew can still get home.</p>
-  <ol class="guide-steps">
-    <li><span class="gn">1</span><div><b>Check the plan</b><small>Three green PASS checks mean the crew can always get home. Leave each stop before its "Leave by" time.</small></div></li>
-    <li><span class="gn">2</span><div><b>Walk the plan</b><small>Press Walk the plan. The blue dot is the crew; the green area is where they can still get home from. Astronaut view shows the crew's own screen.</small></div></li>
-    <li><span class="gn">3</span><div><b>Change it</b><small>Drag a numbered stop on the map, or open Plan your EVA. Every check updates at once.</small></div></li>
-  </ol>
-  <div class="guide-bar"><button class="cta" id="guideGo"><span class="tri"></span>Walk the plan</button><button class="ghost" id="guideClose">I'll look around</button></div>
-</div>
-
-<aside class="pnl left" id="left">
-  <section id="checks"></section>
-  <section id="stopList"></section>
-  <section id="conditions"></section>
-</aside>
-
-<aside class="pnl right" id="right"></aside>
-
-<div class="pnl live" id="live" hidden></div>
-<div class="pnl legend" id="legend"></div>
-<div class="pnl toast" id="toast" role="status" aria-live="polite" hidden></div>
-
-<div class="pnl drawer" id="layersPanel" hidden></div>
-<div class="pnl drawer" id="planPanel" hidden></div>
-
-<footer class="pnl timeline" id="timeline">
-  <button class="play" id="playBtn" aria-label="Walk the plan"><span class="tri"></span><span class="pl">Walk the plan</span><span class="gnum" aria-hidden="true">2</span></button>
-  <div class="tl-wrap"><svg id="tlSvg" aria-label="EVA timeline and elevation profile"></svg><div class="tl-tip" id="tlTip" hidden></div></div>
-  <button class="astro-open" id="astroBtn" aria-label="Open the astronaut view"><span class="helm"></span><span>Astronaut view</span></button>
-</footer>
-
-<!-- Astronaut view: what the crew sees on the walk. A few big numbers, large buttons for gloves. -->
-<div class="astro" id="astro" role="dialog" aria-label="Astronaut view" hidden>
-  <header class="astro-top">
-    <div class="astro-met"><span class="lbl">Mission time</span><b id="aMet">T+0:00</b></div>
-    <div class="astro-title">RED ROUTE<span>Astronaut view · simulated walk</span></div>
-    <button class="astro-btn" id="aExit">Map</button>
-  </header>
-  <section class="astro-status" id="aStatus">
-    <div class="astro-word" id="aWord">GO</div>
-    <div class="astro-sub" id="aSpare"></div>
-    <div class="astro-site" id="aSite"></div>
-    <div class="astro-sub2" id="aBad"></div>
-  </section>
-  <section class="astro-mapwrap" id="aMapWrap" aria-label="Route map around the crew; it turns so the walking direction is up">
-    <div id="aMap"></div>
-    <button class="amap-n" id="aNorth" aria-label="North arrow. Tap to switch between a turning map and north up" title="Tap: turning map / north up">N</button>
-    <div class="amap-zoom"><button id="aZin" aria-label="Zoom in">+</button><button id="aZout" aria-label="Zoom out">&minus;</button></div>
-    <div class="amap-scale"><i id="aScaleBar"></i><span id="aScaleTxt"></span></div>
-    <div class="amap-key"><span><i class="k-way"></i>Your way</span><span><i class="k-steep"></i>Too steep</span></div>
-    <div class="amap-credit">HiRISE: NASA/JPL/UArizona · relief: ESA/DLR/FU Berlin + NASA · via Mars Trek</div>
-  </section>
-  <section class="astro-grid">
-    <div class="astro-tile"><span class="lbl">Walk home</span><b id="aBack">0 MIN</b>
-      <div class="o2bar" id="aO2bar"><i id="aO2"></i><span class="o2mark"></span></div><small id="aO2txt"></small></div>
-    <div class="astro-tile"><span class="lbl" id="aNextLbl">Next stop</span>
-      <div class="astro-next"><svg id="aArrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 L33 35 L20 27 L7 35 Z" fill="#fff"/></svg><b id="aNext"></b></div>
-      <small id="aNextSub"></small></div>
-  </section>
-  <section class="astro-track" id="aTrack" aria-label="Walk progress; click to jump in time"></section>
-  <footer class="astro-ctl">
-    <button class="cta big" id="aPlay"><span class="tri"></span><span id="aPlayTxt">Walk the plan</span></button>
-    <small class="astro-note">Simulated from the plan. On a real EVA the suit's position and clock would drive this screen.</small>
-  </footer>
-</div>
-
-<div class="modal" id="about" hidden>
-  <div class="modal-body pnl">
-    <button class="x" data-close="about" aria-label="Close">&times;</button>
-    <div id="aboutBody"></div>
-  </div>
-</div>
-
-<div class="lightbox" id="lightbox" hidden>
-  <button class="x" id="lbClose" aria-label="Close">&times;</button>
-  <button class="lb-nav prev" id="lbPrev" aria-label="Previous photo">&lsaquo;</button>
-  <figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
-  <button class="lb-nav next" id="lbNext" aria-label="Next photo">&rsaquo;</button>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="v2/app.js?v=8"></script>
+<p>Red Route has moved to one address. <a href="../">Open Red Route</a></p>
 </body>
 </html>

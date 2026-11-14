@@ -36,7 +36,13 @@ Astrogeology PDS Annex, U.S. Geological Survey.
 | Barlow and Barlow Semi Condensed, by Jeremy Tribby | Fonts (loaded from Google Fonts) | SIL Open Font License 1.1 | https://fonts.google.com/specimen/Barlow |
 | NumPy, SciPy, scikit-image, rasterio, Pillow | The Python build (`tools/`) | Open source (BSD-style licences; Pillow: MIT-CMU) | https://pypi.org/ |
 
-The mission badge in the page header is an AI-generated image (Higgsfield) and is labelled as such in the app.
+The logo in the page header and the browser-tab icon are drawn by `tools/make_logo.py` from our own terrain shading
+(HiRISE elevation model) and the planned walk. Until 14 Nov 2026 the site used an AI-generated badge (Higgsfield),
+labelled as AI-generated; it was replaced and is still in the git history. No AI-generated images are used in the app now.
+
+Base camp is not a checked landing site. It was placed on top of the delta so that the loop fits the time rules.
+Within 100 m the ground reaches 19.5° on our 2 m slope grid; the Artemis III EVA study
+(https://ntrs.nasa.gov/citations/20210026296) draws a 100 m landing circle with slopes under 5°.
 
 NASA imagery and data are generally free to use with credit. USGS data are in the public domain.
 Red Route does not use NASA logos or branding.

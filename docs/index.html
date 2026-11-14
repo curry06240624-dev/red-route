@@ -6,23 +6,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Red Route · Marswalk planner</title>
 <meta name="description" content="Plan a Marswalk in Jezero Crater and check, at every step, that the crew can still get home. Built on NASA, USGS and ESA data.">
-<link rel="icon" type="image/png" href="favicon_64.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon_64.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
 
 <header class="brand pnl">
   <div class="badge-wrap">
-    <img src="badge_88.png" srcset="badge_176.png 2x" alt="Red Route mission badge (AI-generated image)" width="46" height="46">
+    <img src="logo_96.png" srcset="logo_192.png 2x" alt="Red Route logo: the planned walk drawn on our terrain map of Jezero" title="Logo drawn by our code from the terrain map and the planned walk" width="46" height="46">
   </div>
   <div class="brand-name">RED ROUTE</div>
-  <div class="brand-sub"><span class="t">MARSWALK PLANNER<br>JEZERO CRATER, MARS</span><span class="ai-tag">BADGE: AI-GENERATED IMAGE</span></div>
+  <div class="brand-sub"><span class="t">MARSWALK PLANNER<br>JEZERO CRATER, MARS</span></div>
 </header>
 
 <nav class="topnav pnl" aria-label="Panels">
@@ -37,7 +37,7 @@
   <p class="guide-lead">Plan a walk on Mars and check, at every step, that the crew can still get home.</p>
   <ol class="guide-steps">
     <li><span class="gn">1</span><div><b>Check the plan</b><small>Three green PASS checks mean the crew can always get home. Leave each stop before its "Leave by" time.</small></div></li>
-    <li><span class="gn">2</span><div><b>Walk the plan</b><small>Press Walk the plan. The blue dot is the crew; the green area is where they can still get home from.</small></div></li>
+    <li><span class="gn">2</span><div><b>Walk the plan</b><small>Press Walk the plan. The blue dot is the crew; the green area is where they can still get home from. Astronaut view shows the crew's own screen.</small></div></li>
     <li><span class="gn">3</span><div><b>Change it</b><small>Drag a numbered stop on the map, or open Plan your EVA. Every check updates at once.</small></div></li>
   </ol>
   <div class="guide-bar"><button class="cta" id="guideGo"><span class="tri"></span>Walk the plan</button><button class="ghost" id="guideClose">I'll look around</button></div>
@@ -61,7 +61,43 @@
 <footer class="pnl timeline" id="timeline">
   <button class="play" id="playBtn" aria-label="Walk the plan"><span class="tri"></span><span class="pl">Walk the plan</span><span class="gnum" aria-hidden="true">2</span></button>
   <div class="tl-wrap"><svg id="tlSvg" aria-label="EVA timeline and elevation profile"></svg><div class="tl-tip" id="tlTip" hidden></div></div>
+  <button class="astro-open" id="astroBtn" aria-label="Open the astronaut view"><span class="helm"></span><span>Astronaut view</span></button>
 </footer>
+
+<!-- Astronaut view: what the crew sees on the walk. A few big numbers, large buttons for gloves. -->
+<div class="astro" id="astro" role="dialog" aria-label="Astronaut view" hidden>
+  <header class="astro-top">
+    <div class="astro-met"><span class="lbl">Mission time</span><b id="aMet">T+0:00</b></div>
+    <div class="astro-title">RED ROUTE<span>Astronaut view · simulated walk</span></div>
+    <button class="astro-btn" id="aExit">Map</button>
+  </header>
+  <section class="astro-status" id="aStatus">
+    <div class="astro-word" id="aWord">GO</div>
+    <div class="astro-sub" id="aSpare"></div>
+    <div class="astro-site" id="aSite"></div>
+    <div class="astro-sub2" id="aBad"></div>
+  </section>
+  <section class="astro-mapwrap" id="aMapWrap" aria-label="Route map around the crew; it turns so the walking direction is up">
+    <div id="aMap"></div>
+    <button class="amap-n" id="aNorth" aria-label="North arrow. Tap to switch between a turning map and north up" title="Tap: turning map / north up">N</button>
+    <div class="amap-zoom"><button id="aZin" aria-label="Zoom in">+</button><button id="aZout" aria-label="Zoom out">&minus;</button></div>
+    <div class="amap-scale"><i id="aScaleBar"></i><span id="aScaleTxt"></span></div>
+    <div class="amap-key"><span><i class="k-way"></i>Your way</span><span><i class="k-steep"></i>Too steep</span></div>
+    <div class="amap-credit">HiRISE: NASA/JPL/UArizona · relief: ESA/DLR/FU Berlin + NASA · via Mars Trek</div>
+  </section>
+  <section class="astro-grid">
+    <div class="astro-tile"><span class="lbl">Walk home</span><b id="aBack">0 MIN</b>
+      <div class="o2bar" id="aO2bar"><i id="aO2"></i><span class="o2mark"></span></div><small id="aO2txt"></small></div>
+    <div class="astro-tile"><span class="lbl" id="aNextLbl">Next stop</span>
+      <div class="astro-next"><svg id="aArrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 L33 35 L20 27 L7 35 Z" fill="#fff"/></svg><b id="aNext"></b></div>
+      <small id="aNextSub"></small></div>
+  </section>
+  <section class="astro-track" id="aTrack" aria-label="Walk progress; click to jump in time"></section>
+  <footer class="astro-ctl">
+    <button class="cta big" id="aPlay"><span class="tri"></span><span id="aPlayTxt">Walk the plan</span></button>
+    <small class="astro-note">Simulated from the plan. On a real EVA the suit's position and clock would drive this screen.</small>
+  </footer>
+</div>
 
 <div class="modal" id="about" hidden>
   <div class="modal-body pnl">
@@ -78,6 +114,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

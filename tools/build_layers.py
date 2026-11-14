@@ -313,22 +313,43 @@ def main():
                              suit_ok=bool(back_min <= SUIT_FAIL_MIN)))
         t = depart
 
-    # Terrain around each stop (50 m radius) for the stop panel.
-    ry, rx = int(math.ceil(50 / gy)), int(math.ceil(50 / gx))   # cells are narrower east-west than north-south
-    yy, xx = np.ogrid[-ry:ry + 1, -rx:rx + 1]
-    disk = (yy * gy) ** 2 + (xx * gx) ** 2 <= 50 ** 2
-    for st in stops.values():
-        r, c = st["rc"]
+    def around(rc, rad):
+        """Slope, roughness and height of the cells within rad metres of a cell."""
+        r, c = rc
+        ry, rx = int(math.ceil(rad / gy)), int(math.ceil(rad / gx))   # cells are narrower east-west than north-south
+        yy, xx = np.ogrid[-ry:ry + 1, -rx:rx + 1]
+        disk = (yy * gy) ** 2 + (xx * gx) ** 2 <= rad ** 2
         r0, r1, c0, c1 = max(0, r - ry), min(h, r + ry + 1), max(0, c - rx), min(w, c + rx + 1)
         m = disk[r0 - (r - ry):r1 - (r - ry), c0 - (c - rx):c1 - (c - rx)]
-        sl, rg, zz = slope[r0:r1, c0:c1][m], rough[r0:r1, c0:c1][m], dem[r0:r1, c0:c1][m]
+        return slope[r0:r1, c0:c1][m], rough[r0:r1, c0:c1][m], dem[r0:r1, c0:c1][m]
+
+    # Terrain around each stop (50 m radius) for the stop panel.
+    for st in stops.values():
+        sl, rg, zz = around(st["rc"], 50)
         st["terrain"] = dict(radius_m=50, slope_mean=round(float(np.nanmean(sl)), 1), slope_max=round(float(np.nanmax(sl)), 1),
                              rough_rms=round(float(np.nanmean(rg)), 2), elev_min=round(float(np.nanmin(zz)), 1),
                              elev_max=round(float(np.nanmax(zz)), 1),
                              nogo_pct=round(float(np.mean(sl > MAX_SLOPE) * 100), 1))
+    # Base camp was placed on top of the delta so that the loop fits the time rules. It is NOT checked as a
+    # landing site, and the app says so with these numbers: how steep the ground gets within 100 m (the
+    # Artemis III EVA study we cite draws a 100 m landing circle with slopes under 5 degrees).
+    sl, _, _ = around(stops["base"]["rc"], 100)
+    stops["base"]["site_check"] = dict(radius_m=100, slope_max=round(float(np.nanmax(sl)), 1),
+                                       slope_mean=round(float(np.nanmean(sl)), 1),
+                                       over5_pct=round(float(np.mean(sl > 5) * 100), 1))
+    print("base camp, 100 m circle:", stops["base"]["site_check"])
 
     dwell = sum(s["dwell_min"] for s in STOPS)
     total_min = t_walk / 60 + dwell
+
+    # Keep the photos and notes that fetch_context.py added on an earlier run (same stop, same rover sol), so a
+    # rebuild that only changes the route or the rules needs no network. Run fetch_context.py to refresh them.
+    kept = {}
+    try:
+        for s in json.load(open(os.path.join(OUT, "mission.json"), encoding="utf-8"))["stops"]:
+            kept[(s["id"], s.get("rover_sol"))] = {k: s[k] for k in ("photos", "notes") if k in s}
+    except (OSError, ValueError, KeyError):
+        pass
 
     # ---- images (north-up, pixel grid = the DEM grid) ----
     s = np.nan_to_num(slope, nan=0.0)
@@ -392,7 +413,8 @@ def main():
     mission = dict(
         generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         dtm=os.path.basename(dtm_path), grid_m=round(gx, 2), aoi=AOI, overlay_bounds=bounds, grid=grid,
-        stops=[{k: v for k, v in st.items() if k != "rc"} for st in stops.values()],
+        stops=[dict({k: v for k, v in st.items() if k != "rc"}, **kept.get((st["id"], st["rover_sol"]), {}))
+               for st in stops.values()],
         order=ROUTE_ORDER, legs=legs,
         totals=dict(dist_km=round(dist_total / 1000, 2), walk_h=round(t_walk / 3600, 2), dwell_min=dwell,
                     eva_h=round(total_min / 60, 2), gain_m=sum(l["gain_m"] for l in legs),

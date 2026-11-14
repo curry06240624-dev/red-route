@@ -15,6 +15,10 @@ of the walk, the crew must be able to get back to base camp inside the EVA time 
 | 2 | Hawksbill Gap, Skinner Ridge (sol 477) | Layered sedimentary rocks of the delta front |
 | 3 | Tenby, upper fan (sol 736) | The curvilinear unit on top of the delta fan |
 
+Base camp was placed on top of the delta so that the loop fits the time rules. It is not checked as a landing site:
+within 100 m the ground reaches 19.5° on our 2 m slope grid, and the Artemis III EVA study we cite draws a 100 m
+landing circle with slopes under 5°.
+
 ## Layers
 - **Optical:** HiRISE 25 cm orthomosaic of Jezero (USGS, served by NASA JPL Mars Trek), plus CTX, MOLA and ESA Mars Express HRSC backgrounds.
 - **Topographic:** slope and rough ground computed from the 1 m HiRISE elevation model (USGS Mars 2020 TRN DTM).
@@ -49,6 +53,7 @@ curl -L -o raw/M20_traverse.json https://mars.nasa.gov/mmgis-maps/M20/Layers/jso
 python tools/build_layers.py --dtm hirise --res 2
 python tools/fetch_context.py
 python tools/rover_check.py
+python tools/make_logo.py
 # 3. serve the web app
 python -m http.server 8765 --directory docs
 ```
@@ -58,9 +63,10 @@ All data, software and font credits are in DATA.md.
 ## Use of AI tools
 The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
 first version of the site, the science stops and the route rules; the team reviewed and approved them and
-asked for later changes. All data shown in the app come from NASA, USGS and ESA. The mission badge (logo)
-is an AI-generated image (Higgsfield) and is labelled as AI-generated in the app; no other AI-generated
-images are used.
+asked for later changes. All data shown in the app come from NASA, USGS and ESA. The logo is drawn by our
+code (`tools/make_logo.py`) from our own terrain map and the planned walk. Until 14 Nov 2026 the site used an
+AI-generated badge (Higgsfield), labelled as AI-generated; it was replaced and is still in the git history. No
+AI-generated images are used in the app now.
 
 ## License
 Apache-2.0 (see LICENSE). NASA and USGS data keep their own terms; see DATA.md.
