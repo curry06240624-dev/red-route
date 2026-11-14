@@ -193,7 +193,7 @@
     let html = `<div class="lbl">Selected stop</div>
       <div class="stop-title"><span class="n">${numberOf(s.id)}</span><h2>${esc(s.name)}</h2></div>`;
     if (photos.length) {
-      html += `<div class="grid6">${photos.slice(0, 6).map((p, k) => `<button data-k="${k}" aria-label="Open photo ${k + 1}"><img src="${p.small || p.medium}" alt="${esc(p.cam)} view near ${esc(s.name)}" loading="lazy"></button>`).join("")}</div>
+      html += `<div class="grid6">${photos.slice(0, 6).map((p, k) => `<button data-k="${k}" aria-label="Open photo ${k + 1}"><img src="${p.thumb || p.small || p.medium}" alt="${esc(p.cam)} view near ${esc(s.name)}"></button>`).join("")}</div>
         <button class="more" id="allPhotos">View all ${photos.length} rover photos</button>
         <div class="src">Perseverance, sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m from this stop` : ""} · NASA/JPL-Caltech</div>`;
     }

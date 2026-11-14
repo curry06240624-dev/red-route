@@ -143,6 +143,27 @@ def main():
                     open(dest, "wb").write(data)
                 pics.append(p)
                 hashes.append(bits)
+        # Small thumbnails go in the site itself, so the stop panel shows them at once even if NASA's server is slow.
+        tdir = os.path.join(ROOT, "docs", "photos", st["id"])
+        os.makedirs(tdir, exist_ok=True)
+        keep = set()
+        for p in pics:
+            name = os.path.basename(p["small"] or "")
+            if not name:
+                continue
+            dest = os.path.join(tdir, name)
+            if not os.path.exists(dest):
+                try:
+                    data = urllib.request.urlopen(urllib.request.Request(p["small"], headers=UA), timeout=60).read()
+                    open(dest, "wb").write(data)
+                except Exception as e:
+                    print("thumbnail failed", p["small"], e)
+                    continue
+            p["thumb"] = f"photos/{st['id']}/{name}"
+            keep.add(name)
+        for name in os.listdir(tdir):   # drop thumbnails of photos no longer picked
+            if name not in keep:
+                os.remove(os.path.join(tdir, name))
         st["photos"] = pics
         st["notes"] = NOTES.get(st["id"])
         json.dump(pics, open(os.path.join(folder, "photos.json"), "w"), indent=1)
