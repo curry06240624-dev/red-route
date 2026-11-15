@@ -219,15 +219,31 @@
     return { cls: "ok", word: "CLEAR", sub: "No solar particle alert in the last 72 h and no eruption (CME) predicted at Mars now.", n: newest(notes) };
   }
 
+  /* Radiation, for scale only (no pass or fail). Both numbers were read in their sources on 15 Nov 2026:
+     - 0.210 ± 0.040 mGy a day: average galactic-cosmic-ray dose rate on the surface at Gale Crater, measured by
+       Curiosity's RAD over about 300 sols (Hassler et al. 2014, Science 343, 1244797, doi:10.1126/science.1244797).
+     - 8,100 micrograys: what RAD measured in the solar storm of 20 May 2024 (NASA/JPL news release, 10 June 2024). */
+  const RAD = { gale_mgy_day: 0.21, storm_ugy: 8100,
+    paper: "https://doi.org/10.1126/science.1244797", storm: "https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/" };
+  const walkDoseUGy = (m) => RAD.gale_mgy_day * 1000 * ((m.totals.eva_h * 60) / 1440);   // quiet-day dose for the time outside
+
   function renderConditions() {
     let html = '<div class="lbl-lg">Conditions</div>';
     if (S.donki && S.donki.notes) {
       const live = !!S.donki.live, saved = S.donki.fetched || "an earlier date";
       const ref = live ? Date.now() : (Date.parse(`${S.donki.fetched}T23:59:59+08:00`) || Date.now());
       const v = spaceWeather(S.donki.notes, ref);
-      const src = live ? "Live NASA DONKI notices" : `Saved NASA DONKI notices from ${saved}; the live feed did not answer`;
       const link = v.n && /^https:\/\//.test(v.n.url || "") ? v.n.url : "";
-      html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${live ? "" : `As of ${esc(saved)}: `}${esc(v.sub)} ${src}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${v.cls === "ok" ? "latest notice" : "the notice"}</a>` : ""}.</span></div>`;
+      const a = link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${v.cls === "ok" ? "latest notice" : "the notice"}</a>` : "";
+      if (live) {
+        html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${esc(v.sub)} Live NASA DONKI notices${a}.</span></div>`;
+      } else if (v.cls !== "ok") {   // a saved warning is still worth showing, with its date
+        html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">As of ${esc(saved)}: ${esc(v.sub)} Saved NASA DONKI notices; ${S.donki.failed ? "the live feed did not answer" : "checking the live feed"}${a}.</span></div>`;
+      } else if (S.donki.failed) {   // never show a green CLEAR from old data
+        html += `<div class="cond-row"><span>Space weather</span><b class="warn">NOT CHECKED</b><span class="s">The live NASA DONKI feed did not answer, so today's space weather is not checked. The saved notices from ${esc(saved)} showed no alert${a}.</span></div>`;
+      } else {
+        html += `<div class="cond-row"><span>Space weather</span><b>CHECKING</b><span class="s">Reading the live NASA DONKI notices.</span></div>`;
+      }
     }
     if (S.meda && S.meda.sols && S.meda.sols.length) {
       const w = S.meda.sols[S.meda.sols.length - 1];
@@ -235,6 +251,8 @@
       const day = ((sh * 60 + sm) - (rh * 60 + rm) - 120) / 60, fits = day >= S.m.totals.eva_h;
       html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
+    const dose = walkDoseUGy(S.m);
+    html += `<div class="cond-row" id="radRow"><span>Radiation</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value: Jezero sits higher, so a little more. For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
     $("#conditions").innerHTML = html;
   }
 
@@ -259,7 +277,7 @@
           notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 8000) })) };
         renderConditions();
       })
-      .catch(() => {});
+      .catch(() => { if (S.donki && !S.donki.live) { S.donki.failed = true; renderConditions(); } });
   }
 
   /* ---------- selected stop panel ---------- */
@@ -808,7 +826,8 @@
       title = "Storm warning";
       body = `<div class="dr"><span>Warning time (what-if, you pick)</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
         + row("Walk home from here", fmtMin(n.back)) + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the warning time runs out` : `${fmtMin(spare)} short of shelter`);
-      note = "A what-if, not a forecast: real warning times depend on the storm. The live NASA DONKI notices are under Conditions.";
+      const dose = walkDoseUGy(m);
+      note = `A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm, about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times this walk's quiet-day dose (see Radiation under Conditions).`;
     } else {
       const D = drill.late, P = m.profile, tl = m.timeline || [], lastT = P[P.length - 1].t;
       let worst = Infinity;
@@ -1229,7 +1248,8 @@
         <tr><td>Speed on slopes</td><td>× exp(−3.5 tan slope)</td><td>Tobler's hiking function, tested on analog missions (<a href="https://discovery.ucl.ac.uk/id/eprint/10201492/1/1-s2.0-S0094576524007501-main.pdf" target="_blank" rel="noopener">Goodwin et al. 2024</a>)</td></tr>
         <tr><td>Rough ground</td><td>&gt; ${a.rough_m} m relief, ${a.rough_penalty}× slower</td><td>Tobler's off-path factor; HiRISE misses rocks under about 1.5 m (<a href="https://marsoweb.nas.nasa.gov/landingsites/msl/workshops/4th_workshop/talks/Golombek_Rocks_4th_Wkshp.pdf" target="_blank" rel="noopener">Golombek</a>)</td></tr>
         <tr><td>EVA limit</td><td>${a.eva_limit_h} h, ${Math.round(a.reserve * 100)} % reserve</td><td>NASA suit design limit (EVA-EXP-0042)</td></tr>
-        <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr></table>
+        <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr>
+        <tr><td>Radiation dose rate</td><td>${RAD.gale_mgy_day} mGy a day (quiet Sun, Gale Crater)</td><td>Curiosity's RAD, average over about 300 sols (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). The May 2024 storm value, about ${RAD.storm_ugy.toLocaleString("en-US")} microgray, is from <a href="${RAD.storm}" target="_blank" rel="noopener">NASA/JPL</a>. For scale only: the app does not check a dose limit.</td></tr></table>
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
       <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast.</p>
@@ -1243,13 +1263,15 @@
         <li>The walking curve is Earth-calibrated. Real suited speed depends on the suit, the load and fatigue.</li>
         <li>Solar-particle alerts come from sensors near Earth. Eruption (CME) alerts include Mars arrival times.</li>
         <li>The public MEDA weather summaries end in 2024, so the daylight check uses the latest available sols.</li>
+        <li>The radiation number is a quiet-day average measured at Gale Crater, not at Jezero. It is shown for scale and is not checked against a limit.</li>
         <li>Base camp was placed on top of the delta so that the loop fits the time rules. It is not checked as a landing site${sc ? `: the ground is gentle within 50 m (up to ${(base.terrain || {}).slope_max}°), but within ${sc.radius_m} m it reaches ${sc.slope_max}°, and the <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> we cite draws a 100 m landing circle with slopes under 5°` : ""}. The rocket-plume distance from the sample depot is not checked either.</li></ul>
       <h3>Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
         <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech (Mastcam-Z: NASA/JPL-Caltech/ASU; SuperCam: NASA/JPL-Caltech/LANL/CNES/IRAP).</li>
         <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech/CAB. They are not live.</li>
-        <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service; if it does not answer, the app shows a saved copy and its date.</li>
+        <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service. If it does not answer, the app says NOT CHECKED and shows the date of its saved copy.</li>
+        <li>Radiation: published values from Curiosity's Radiation Assessment Detector (RAD), NASA/JPL-Caltech/SwRI.</li>
         <li>Software: Leaflet map library (BSD 2-Clause licence); Barlow fonts (SIL Open Font License). The full list is in DATA.md in the repo.</li></ul>
       <h3>Use of AI tools</h3>
       <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The logo is drawn by our code from our own terrain map and the planned walk; until 14 Nov 2026 the site used an AI-generated badge (Higgsfield), which was replaced. All map and rover data are from NASA, USGS and ESA.</p>`;
