@@ -32,6 +32,7 @@ landing circle with slopes under 5°.
 - **Spoken alerts:** in the Astronaut view, off by default. The browser's own voice reads the status when it changes. It is not AI-generated audio.
 - **Take it with you:** a one-page printable cuff card made from the current plan (our own sketch of the walk, stops with arrive and leave-by times, the three checks, the turn-back rules, the planning numbers and their sources) and a GeoJSON download of the route.
 - **Daylight:** the walk day worked out with the NASA GISS Mars24 method: pick a start time in local solar time and see when the crew is back, when the Sun sets, and whether oxygen or daylight sets each leave-by time (flat horizon, no twilight margin).
+- **3D walk:** a button next to Astronaut view opens the same plan in 3D (`docs/walk3d/`): the HiRISE elevation model as terrain with the HiRISE mosaic on it, the route, the stops and Perseverance's path. An astronaut can be walked in third or first person, or sent along the route on auto-walk, with the planner's pace and no-go rules and its walk-home and spare-time readouts; it starts at the planner's clock time. The astronaut, the habitat, the rocks and the small bumps in the ground are illustrative: the number of rocks and the height of the bumps follow the rough-ground layer, but each rock and bump is made up.
 - **Context:** Perseverance's real traverse.
 
 ## How the route is found
@@ -69,6 +70,8 @@ python tools/make_logo.py
 python -m http.server 8765 --directory docs
 ```
 Python packages: numpy, scipy, scikit-image, rasterio, pillow. The web app uses the Leaflet map library and the Barlow fonts.
+The 3D walk uses three.js, kept in `docs/walk3d/vendor/three`. Its astronaut model (`docs/walk3d/models/astronaut.glb`) is built by
+`tools/build_astronaut.py`: open the script in Blender 5.2 (Scripting tab) and run it. `tools/astronaut.blend` is the saved result.
 All data, software and font credits are in DATA.md.
 
 ## Tests
@@ -88,7 +91,10 @@ first version of the site, the science stops and the route rules; the team revie
 asked for later changes. All data shown in the app come from NASA, USGS and ESA. The logo is drawn by our
 code (`tools/make_logo.py`) from our own terrain map and the planned walk. Until 14 Nov 2026 the site used an
 AI-generated badge (Higgsfield), labelled as AI-generated; it was replaced and is still in the git history. No
-AI-generated images are used in the app now.
+AI-generated images are used in the app now. The 3D walk (`docs/walk3d/`, `docs/extra/walk3d.js`) and the Blender
+script that builds its astronaut (`tools/build_astronaut.py`) were written by Claude at the team's request; the
+idea of a 3D walk with third-person, first-person and auto-walk views was the team's. The astronaut is a 3D model
+made by that script in Blender, not a picture from an image generator.
 
 ## License
 Apache-2.0 (see LICENSE). NASA and USGS data keep their own terms; see DATA.md.

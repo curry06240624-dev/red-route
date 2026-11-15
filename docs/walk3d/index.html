@@ -1,0 +1,96 @@
+<!doctype html>
+<!-- AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. -->
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Route · 3D walk</title>
+<meta name="description" content="Walk the planned Marswalk in 3D on the real HiRISE terrain of Jezero Crater: map view, third person and first person.">
+<link rel="icon" type="image/png" href="../favicon_64.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="walk3d.css?v=1">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+<main id="stage" data-mode="map">
+  <canvas id="gl" aria-label="3D view of the Marswalk in Jezero Crater"></canvas>
+  <div id="visor" hidden></div>
+  <div id="labels"></div>
+  <canvas id="compass" width="1120" height="92" hidden></canvas>
+  <div id="hud" class="pnl" hidden></div>
+  <div id="stopcard" class="pnl" hidden></div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="hint" class="pnl"></div>
+
+  <div id="minimapWrap" class="pnl">
+    <canvas id="minimap" width="664" height="300"></canvas>
+    <span>Click the mini-map to move the crew</span>
+  </div>
+
+  <div id="layers" class="pop pnl" hidden>
+    <h2>Layers</h2>
+    <label><input type="checkbox" data-layer="photo" checked> HiRISE photo mosaic (NASA Mars Trek)</label>
+    <label><input type="checkbox" data-layer="slope"> Slope: caution and no-go ground</label>
+    <label><input type="checkbox" data-layer="hazard"> Rough ground</label>
+    <label><input type="checkbox" data-layer="returntime"> Walk-home time to base</label>
+    <label><input type="checkbox" data-layer="traverse" checked> Perseverance's real path</label>
+    <label><input type="checkbox" data-layer="rocks" checked> Rocks (illustrative, from the roughness map)</label>
+    <label><input type="checkbox" data-layer="bumps" checked> Small bumps (illustrative, from the roughness map)</label>
+    <div class="sl"><label for="relief">Relief (height stretch)<output id="reliefOut">×1.0 true scale</output></label>
+      <input type="range" id="relief" min="1" max="3" step="0.5" value="1"></div>
+    <p class="small">Without the photo, the ground shows terrain shading from the HiRISE elevation model.</p>
+  </div>
+
+  <div id="help" class="pop pnl" hidden>
+    <h2>Controls</h2>
+    <table>
+      <tr><td>Map view</td><td>Drag to move · right-drag or Ctrl+drag to rotate · scroll to zoom · double-click the ground to put the crew there</td></tr>
+      <tr><td>Walk</td><td><kbd>W</kbd> <kbd>S</kbd> or <kbd>↑</kbd> <kbd>↓</kbd> walk · <kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> turn · drag to look around · scroll to zoom (third person)</td></tr>
+      <tr><td>Views</td><td><kbd>M</kbd> map · <kbd>V</kbd> switch third / first person</td></tr>
+      <tr><td>Auto-walk</td><td><kbd>Space</kbd> start or pause. Walking takes back control.</td></tr>
+      <tr><td>Time</td><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> set ×1, ×10, ×60, ×300</td></tr>
+      <tr><td>Restart</td><td><kbd>R</kbd> back to base camp, clock to T+0:00</td></tr>
+    </table>
+    <p class="small">Walking pace follows the planner's rules: slower on slopes and rough ground, and no stepping onto ground steeper than the suit limit.</p>
+  </div>
+
+  <div id="pad" hidden>
+    <button data-key="a" aria-label="Turn left">◀</button>
+    <div><button data-key="w" aria-label="Walk forward">▲</button><button data-key="s" aria-label="Walk back">▼</button></div>
+    <button data-key="d" aria-label="Turn right">▶</button>
+  </div>
+
+  <div id="loading"><b>Loading Jezero terrain…</b><span id="loadMsg">HiRISE elevation model</span></div>
+  <div id="credit">Terrain: USGS Mars 2020 HiRISE elevation model · Photo: NASA/JPL/UArizona HiRISE via NASA Mars Trek · Astronaut, habitat, rocks and small bumps are illustrative</div>
+</main>
+
+<header class="bar pnl">
+  <a class="brand" id="brandLink" href="../" title="Back to the planner">
+    <img src="../logo_96.png" srcset="../logo_192.png 2x" alt="" width="34" height="34">
+    <span class="brand-name">RED ROUTE</span><span class="brand-sub">3D WALK</span>
+  </a>
+  <button id="closeBtn" class="ghost" hidden>← Map</button>
+  <div class="seg" id="modes" role="group" aria-label="View">
+    <button data-mode="map" class="on">Map</button>
+    <button data-mode="third">Third person</button>
+    <button data-mode="first">First person</button>
+  </div>
+  <button id="auto" class="cta"><span class="ico tri"></span><span class="lbl">Auto-walk</span></button>
+  <label class="speed">Time
+    <select id="warp">
+      <option value="1">×1</option>
+      <option value="10">×10</option>
+      <option value="60" selected>×60</option>
+      <option value="300">×300</option>
+    </select>
+  </label>
+  <button id="reset" class="ghost" title="Back to base camp, clock to T+0:00">Restart</button>
+  <span class="grow"></span>
+  <button id="layersBtn" class="ghost">Layers</button>
+  <button id="helpBtn" class="ghost">Controls</button>
+</header>
+<script type="module" src="walk3d.js?v=1"></script>
+</body>
+</html>
