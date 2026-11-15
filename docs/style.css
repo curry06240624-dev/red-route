@@ -399,3 +399,71 @@ body.astro-on { overflow: hidden; }
 @media (max-width: 900px) { .drawer { z-index: 1200; } }
 .chk-tbl td:first-child { width: 22%; font-weight: 600; color: var(--text); }
 .chk-tbl td:nth-child(3) { color: #fcd9a8; }
+
+/* ===== Phone fixes, 15 Nov evening: found by an AI reviewer that tested the live app at phone sizes (iPhone and Android sizes, upright and sideways). Every rule is inside the phone media query, so the desktop does not change. ===== */
+@media (max-width: 900px) {
+  /* M2: the walking strip sits UNDER the map (between the map and the clock), never on it.
+     It hid the crew dot, and at 375 px wide it covered the top bar so PLAN YOUR EVA could not be tapped. */
+  .live { position: static; order: 0; margin: 8px 8px 0; max-width: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .live > div { padding: 5px 6px 6px; border-left: 0; border-top: 1px solid var(--line-2); }
+  .live > div:first-child, .live > .where { border-top: 0; }
+  .live > .where { grid-column: span 2; }
+  .live .where b { white-space: normal; }
+  .live .where small { display: none; }
+  .live .lbl { letter-spacing: .08em; }
+  .live .alarm-txt { grid-column: 1 / -1; padding: 4px; text-align: center; }
+  /* M3: drill buttons a thumb can hit (were 25 px tall), four in a row */
+  .live > .drills { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 6px; border-top: 1px solid var(--line); }
+  .live .drills button { min-height: 44px; padding: 3px 4px; font-size: 10.5px; letter-spacing: .03em; line-height: 1.15; white-space: normal; }
+  /* M3: the drill card keeps the top half of the screen (the map, the crew dot and the dashed way home) in view */
+  body .drill-card:not(.in-astro) { max-height: 50vh !important; }
+  .drill-card .x { min-width: 44px; min-height: 44px; margin: -10px -12px -10px 0; font-size: 28px; }   /* was 17 x 22 px */
+  .drill-card > .ghost, .drill-card .dpick button, .drill-card .dbtns button { min-height: 44px; }
+  /* M4: "How it works" (also opened from an N / D / A tag, scrolled down): the close button stays on screen */
+  .modal { overscroll-behavior: contain; }
+  .modal-body { overflow: visible; padding: 18px 16px 22px; }   /* the dialog itself scrolls, so the button can stick */
+  .modal-body > .x { position: sticky; top: 6px; float: right; z-index: 5; width: 44px; height: 44px; margin: -12px -10px 0 8px;
+    background: rgba(9,10,12,.94); border: 1px solid var(--line); line-height: 1; }
+  /* S1: first screen shows the map, then the clock with "Walk the plan"; the guide comes under the clock */
+  .guide { order: 2; }
+  .guide-bar button { min-height: 44px; }
+  /* S2: drawers are solid (text under them showed through), never taller than 75 % of the screen, close button stays put */
+  .drawer { background: rgba(9,10,12,.97); max-height: 75vh !important; overscroll-behavior: contain; }
+  .drawer > .x { position: sticky; top: 0; display: block; z-index: 3; width: 44px; height: 44px; margin: -14px -14px 0 auto; line-height: 1; background: rgba(9,10,12,.97); }
+  /* S3: sliders, ticks and buttons big enough for a thumb */
+  .sl input[type=range] { height: 36px; margin: 0; }
+  .tog, .lay { min-height: 40px; }
+  .tog input, .lay input { width: 20px; height: 20px; flex: none; }
+  .planbar .ghost, .tk-row .ghost, .more, .bases button { min-height: 40px; }
+  .topnav button { min-height: 40px; }
+  .leaflet-touch .leaflet-control-zoom a { width: 40px; height: 40px; line-height: 40px; font-size: 22px; }
+  .rr-ask-card .rr-ask-x { min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0; }
+  /* S4: N / D / A tags: same look, bigger invisible tap area */
+  .stag { position: relative; }
+  .stag::after { content: ""; position: absolute; inset: -12px -8px; }
+  /* S5: a vertical swipe on the clock scrolls the page (it used to move the clock); sideways still drags the time */
+  #tlSvg { touch-action: pan-y; }
+  /* S6: iPhone Safari zooms the whole page when a field under 16 px gets focus */
+  .dl24 .dl24-pick select, .dl24 .dl24-pick input { font-size: 16px; min-height: 36px; }
+  /* S7: photo viewer uses the phone's width (photo was 230 x 168 px), arrows sit on the photo */
+  .lightbox { grid-template-columns: 1fr; }
+  .lightbox figure { grid-column: 1; grid-row: 1; padding: 0 4px; }
+  .lightbox img { max-width: calc(100vw - 8px); max-height: 72vh; }
+  .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 48px; height: 96px; font-size: 44px; background: rgba(0,0,0,.45); }
+  .lb-nav.prev { left: 0; } .lb-nav.next { right: 0; }
+  #lbClose { z-index: 3; width: 48px; height: 48px; }
+  /* iPhone: 58vh is measured with Safari's bars hidden; svh uses the height you actually see (older browsers keep 58vh) */
+  #map { height: 58svh; }
+  /* iPhone: no double-tap page zoom on fast repeated taps (pinch zoom still works) */
+  html { touch-action: manipulation; }
+}
+/* landscape phones: put the top bar beside the logo, so the short map (about 200 px tall) keeps more room for the route */
+@media (max-width: 900px) and (min-width: 700px) and (orientation: landscape) {
+  .topnav { top: 8px; left: 236px; }
+}
+/* phones: the storm drill's four warning choices sit in one row under their label, so the verdict stays in view */
+@media (max-width: 900px) {
+  .drill-card .dr-pick { flex-wrap: wrap; row-gap: 6px; }
+  .drill-card .dr-pick .dpick { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .drill-card .dr-pick .dpick button { padding: 4px 2px; }
+}

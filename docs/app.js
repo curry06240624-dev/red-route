@@ -70,7 +70,10 @@
   function fitRoute() {
     const b = S.routeLine.getBounds();
     for (const s of S.m.stops) b.extend([s.lat, s.lon]);   // optional stops too, so they can be seen and ticked on
-    if (isMobile()) map.fitBounds(b, { padding: [20, 20] });
+    if (isMobile()) {   // phones: keep the route clear of the logo and top bar (top) and of the map buttons and credit line (right, bottom)
+      const h = map.getSize().y, top = Math.max($(".brand").getBoundingClientRect().bottom, $(".topnav").getBoundingClientRect().bottom) + 10;
+      map.fitBounds(b, { paddingTopLeft: [16, Math.min(top, h * 0.45)], paddingBottomRight: [136, Math.min(96, h * 0.3)] });
+    }
     else map.fitBounds(b, { paddingTopLeft: [350, 90], paddingBottomRight: [470, 170] });
   }
 
@@ -907,13 +910,13 @@
         + (SR ? `<button data-warn="real" class="${real ? "on" : ""}">Real storm</button>` : "");
       title = "Storm warning";
       body = row("Walk home from here", fmtMin(backUp)) + row("Get inside (same as the suit check)", `${GET_INSIDE_MIN} min`)
-        + `<div class="dr"><span>Warning time${real ? "" : " (what-if, you pick)"}${stag(real ? "d" : "a", "drillHow")}</span><span class="dpick">${picks}</span></div>`;
+        + `<div class="dr dr-pick"><span>Warning time${real ? "" : " (what-if, you pick)"}${stag(real ? "d" : "a", "drillHow")}</span><span class="dpick">${picks}</span></div>`;
       if (real) {
         // the solar storm of 20 May 2024, as Curiosity's RAD measured it (extra/storm-replay.js)
         const w = SR.walkHome(need), rnd = (x) => (x >= 100 ? Math.round(x / 10) * 10 : Math.round(x));
-        body += row("20 May 2024: alarm to strongest reading", `${warn} min <small>measured by Curiosity's RAD in Gale Crater</small>`)
+        body += row("20 May 2024: alarm to strongest reading", `${warn} min`)
           + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the strongest reading began` : `not inside until ${fmtMin(spare)} after the strongest reading began`, spare >= 0 ? "INSIDE BEFORE THE PEAK" : "STILL OUTSIDE AT THE PEAK")
-          + row(`Radiation until inside (${fmtMin(w.minutes)}${w.cut ? ", where our readings end" : ""})`, `about ${rnd(w.ugy)} µGy <small>the same minutes on a quiet day: about ${rnd(w.quiet_ugy)} µGy</small>`);
+          + row(`Radiation until inside (${fmtMin(w.minutes)}${w.cut ? ", where our readings end" : ""})`, `about ${rnd(w.ugy)} µGy <small>quiet day: about ${rnd(w.quiet_ugy)} µGy</small>`);
         note = `A replay, not a forecast: Curiosity's RAD readings for the solar storm of ${stormDay(SR)} in Gale Crater, from NASA's PDS archive (our reading). The alarm is the first reading above ${SR.alarmX} times the normal level, which is our choice. Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm itself arriving: this data holds no earlier warning. Measured on the rover's deck, not in a suit.`;
       } else {
         body += verdict(spare >= 0, spare >= 0 ? `inside with ${fmtMin(spare)} to spare` : `${fmtMin(spare)} short of shelter`);
