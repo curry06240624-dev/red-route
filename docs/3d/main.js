@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=12";
-import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=12";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=12";
-import { makeFx } from "./fx.js?v=12";
-import { Rocks, Footprints, Dust } from "./props.js?v=12";
-import { Sound } from "./sound.js?v=12";
+import * as P from "./plan.js?v=13";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=13";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=13";
+import { makeFx } from "./fx.js?v=13";
+import { Rocks, Footprints, Dust } from "./props.js?v=13";
+import { Sound } from "./sound.js?v=13";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -650,13 +650,20 @@ function renderHelm(n, v) {
   const ar = $("#xArrow"); ar.style.display = brg == null ? "none" : ""; if (brg != null) ar.style.transform = `rotate(${(brg - S.yaw).toFixed(1)}deg)`;
   put("xLeaveLbl", esc(txt("hLeaveLbl"))); put("xLeave", esc(txt("hLeave")), $("#hLeave").className); put("xLeaveSub", esc(txt("hLeaveSub")), $("#hLeaveSub").className);
   // the ground
-  const hd = (S.mode === "plan" ? S.heading : S.yaw) * DEG, sA = G.slopeAt(S.pos.x + Math.sin(hd) * 6, S.pos.z - Math.cos(hd) * 6), lim = a.max_slope_deg;
+  // On the planned route the slope is the plan's own (its 2 m grid, where the route never crosses no-go ground). The page's
+  // 4 m grid can read the same spot a little steeper, so it is only used off the route and for the way you face in a free walk.
+  const lim = a.max_slope_deg, onPlan = !n.after && (S.mode === "plan" || n.src === "plan");
+  const hd = S.yaw * DEG, legNow = S.mode === "plan" ? n.leg : n.onLeg;
+  let sA = G.slopeAt(S.pos.x + Math.sin(hd) * 6, S.pos.z - Math.cos(hd) * 6);
+  if (S.mode === "plan" && !n.after) { const pr = P.profileAt(m, n.leg, Math.min(S.legEnd[n.leg] ?? n.d, n.d + 6)); if (pr) sA = pr.s; }
   put("xSlope", sA == null ? "–" : `${sA.toFixed(1)}°${sA > lim ? " · NO-GO" : ""}`, sA != null && sA > lim ? "bad" : "");
   setBar("xSlopeBar", sA == null ? 0 : sA / (lim / 0.6), sA != null && sA > lim ? "bad" : sA != null && sA > lim - 3 ? "warn" : "");
   put("xPace", `${(S.moving > 0.05 && !n.after ? walkSpeed(S.pos.x, S.pos.z) * Math.min(1, S.moving) : 0).toFixed(2)} m/s`);
   put("xElev", `${Math.round(G.height(S.pos.x, S.pos.z) + G.Y0).toLocaleString("en-US").replace("-", "−")} m`);
-  const here = G.slopeAt(S.pos.x, S.pos.z), rough = G.roughAt(S.pos.x, S.pos.z) > a.rough_m;
-  put("xGround", here != null && here > lim ? "NO-GO SLOPE" : rough ? `ROUGH · ${a.rough_penalty}× SLOWER` : "FIRM", here != null && here > lim ? "sm bad" : rough ? "sm warn" : "sm");
+  let here = G.slopeAt(S.pos.x, S.pos.z);
+  if (onPlan && n.d != null && legNow >= 0) { const pr = P.profileAt(m, legNow, n.d); if (pr) here = pr.s; }
+  const rough = G.roughAt(S.pos.x, S.pos.z) > a.rough_m, noGo = here != null && here > lim, steep = here != null && here > lim - 3;
+  put("xGround", noGo ? "NO-GO SLOPE" : rough ? (S.mode === "plan" ? "ROUGH GROUND" : `ROUGH · ${a.rough_penalty}× SLOWER`) : steep ? `STEEP · ${Math.round(here)}° OF ${lim}°` : "FIRM", noGo ? "sm bad" : rough || steep ? "sm warn" : "sm");
   put("xRoute", esc(txt("hRoute")), $("#hRoute").className);
   // the word
   $("#xStatus").className = `h-status ${n.src === "wait" ? "" : v.cls}`;
