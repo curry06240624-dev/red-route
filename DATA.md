@@ -73,6 +73,12 @@ Mars Trek) and two layers worked out from the 1 m HiRISE elevation model (which 
 the page's sun). The sun on the 3D page is fixed for the picture (low in the west-north-west); it is not the Mars24 daylight
 of the planner. These layers change how the 3D picture looks and never change a time or a margin.
 
+The second 3D page (`docs/walk3d/`, the hurt-crewmate drill) uses four ground pictures (`img/photo_*.jpg`): the HiRISE 25 cm
+orthomosaic of Jezero (NASA/JPL/University of Arizona; mosaic by USGS Astrogeology) from NASA JPL Mars Trek tiles, joined, cut
+to the terrain grid and tinted by the page (`docs/walk3d/img/photo.json`, `docs/walk3d/README.md`). Its figures, base camp, sky
+and helmet rim are drawn by code: nothing on that page is AI-made. It uses three.js r169 (MIT) and Barlow (OFL), stored in
+`docs/walk3d/vendor/`. Both 3D pages read the planner's own data files and route engine and change none of them.
+
 Base camp is not a checked landing site. It was placed on top of the delta so that the loop fits the time rules.
 Within 100 m the ground reaches 19.5° on our 2 m slope grid; the Artemis III EVA study
 (https://ntrs.nasa.gov/citations/20210026296) draws a 100 m landing circle with slopes under 5°.
