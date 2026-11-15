@@ -65,7 +65,7 @@
     refreshDonki();
   }).catch((e) => { console.error(e); $("#checks").innerHTML = '<div class="bad">Could not load the mission data.</div>'; });
 
-  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } }
+  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } document.dispatchEvent(new CustomEvent("redroute:render")); }
 
   function fitRoute() {
     const b = S.routeLine.getBounds();
@@ -686,6 +686,7 @@
       ${st.after ? "" : `<div class="drills" role="group" aria-label="Bad-day drills: what if it goes wrong right here">${drillBtns()}</div>`}`;
     eva.nav = { T, back, mPlan, mBad, lim, st, here, nextS, dist, pos };
     renderAstro(eva.nav);
+    document.dispatchEvent(new CustomEvent("redroute:time", { detail: eva.nav }));
   }
 
   function play() {
@@ -1253,4 +1254,8 @@
       <h3>Use of AI tools</h3>
       <p>The code was written with help from an AI coding assistant (Claude by Anthropic), which also suggested the first version of the site, stops and route rules; the team reviewed and approved them and asked for later changes. The logo is drawn by our code from our own terrain map and the planned walk; until 14 Nov 2026 the site used an AI-generated badge (Higgsfield), which was replaced. All map and rover data are from NASA, USGS and ESA.</p>`;
   }
+  // Hooks for add-on files in docs/extra/: read-only helpers, plus the events "redroute:render" (after every
+  // redraw of the panels) and "redroute:time" (after every clock move, with the crew's numbers in event.detail).
+  Object.assign(window.RedRoute, { api: { getChecks, breakingPoints, leaveBy, leaveSpare, stopById, shortName, nearestStopName,
+    fmtMin, hm, sgn, esc, spaceWeather, openModal, eva, zone } });
 })();
