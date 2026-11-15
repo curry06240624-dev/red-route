@@ -1,0 +1,30 @@
+{
+ "area": {
+  "lon0": 77.37198487089287,
+  "lon1": 77.45594986449365,
+  "lat1": 18.480009949764835,
+  "lat0": 18.44404182020733
+ },
+ "walk": {
+  "lon0": 77.3807,
+  "lon1": 77.41166,
+  "lat0": 18.44931,
+  "lat1": 18.47366
+ },
+ "source": "https://trek.nasa.gov/tiles/Mars/EQ/JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd/1.0.0/default/default028mm/{z}/{y}/{x}.png",
+ "zoom_area": 16,
+ "zoom_walk": 17,
+ "lo": 0.11,
+ "hi": 0.88,
+ "credit": "HiRISE 25 cm orthomosaic of Jezero Crater: NASA/JPL/University of Arizona, mosaic by USGS Astrogeology (Mars 2020 landing products), tiles from NASA JPL Mars Trek. Stitched and cropped to the terrain grid; black and white, tinted by the page.",
+ "layer": "JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd",
+ "size_area": [
+  7424,
+  3180
+ ],
+ "size_walk": [
+  5771,
+  4539
+ ],
+ "fetched": "2026-11-15"
+}

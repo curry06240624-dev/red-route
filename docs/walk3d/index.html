@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Red Route · 3D walk</title>
+<meta name="description" content="The planned Marswalk in 3D on the real terrain of Jezero Crater, with the hurt-crewmate drill.">
+<link rel="icon" type="image/png" href="../favicon_64.png?v=2">
+<link rel="stylesheet" href="walk3d.css?v=4">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="view" aria-label="3D view of the planned Marswalk on the real terrain of Jezero Crater" tabindex="0"></canvas>
+<div id="labels" aria-hidden="true"></div>
+
+<div id="loading" role="status" aria-live="polite">
+  <div class="ld-box">
+    <div class="ld-name">RED ROUTE</div>
+    <div class="ld-sub">3D WALK · JEZERO CRATER, MARS</div>
+    <div class="ld-bar"><i id="ldBar"></i></div>
+    <div class="ld-txt" id="ldTxt">Loading the real terrain…</div>
+  </div>
+</div>
+
+<div class="bars" aria-hidden="true"><i></i><i></i></div>
+<div id="title" hidden>
+  <div class="t-k">NASA SPACE APPS 2026 · MARTIAN MAP</div>
+  <div class="t-h">RED ROUTE</div>
+  <div class="t-s">The Marswalk, planned for the bad day · Jezero Crater, Mars</div>
+  <div class="t-b"><button id="titleDrill" class="cta"><span class="tri"></span>Play the drill</button><button id="titleFilm" class="ghost" hidden>Watch the film · 29 s</button><a class="ghost" href="../3d/">Walk it yourself in 3D</a></div>
+  <div class="t-c">Real terrain and orbital photo: HiRISE, NASA/JPL/University of Arizona/USGS</div>
+</div>
+
+<header class="brand pnl">
+  <img src="../logo_96.png" srcset="../logo_192.png 2x" alt="Red Route logo: the planned walk drawn on our terrain map of Jezero" width="40" height="40">
+  <div class="brand-name">RED ROUTE</div>
+  <div class="brand-sub">3D WALK<br>JEZERO CRATER, MARS</div>
+</header>
+
+<nav class="modes pnl" aria-label="View">
+  <button data-mode="follow" class="on">THIRD PERSON</button>
+  <button data-mode="helmet">HELMET VIEW</button>
+  <button data-mode="overview">WHOLE WALK</button>
+  <button id="filmBtn" hidden>DRILL FILM</button>
+  <button id="checksBtn" class="only-phone" aria-expanded="false">CHECKS</button>
+  <button id="creditsBtn" aria-expanded="false">CREDITS</button>
+  <a class="go" href="../3d/" title="The other 3D page: walk the route yourself in first person, with the helmet display">FREE WALK</a>
+</nav>
+
+<section id="checks" class="pnl side" aria-label="Get-home checks"></section>
+
+<div id="live" class="pnl live" aria-live="off"></div>
+<div id="banner" hidden></div>
+
+<section id="helmet" hidden aria-label="Helmet view">
+  <div class="visor"></div>
+  <div class="h-top">
+    <div class="h-met" id="hMet">T+0:00</div>
+    <div class="h-word" id="hWord">GO</div>
+    <div class="h-spare" id="hSpare"></div>
+  </div>
+  <div class="h-left">
+    <div class="lbl">If EV2 is hurt and EV1 helps</div>
+    <b id="hBad"></b>
+    <div class="lbl sp">Leave by</div>
+    <b id="hLeave"></b>
+    <small id="hLeaveSub"></small>
+    <div class="lbl sp h-extra">Must be home by</div>
+    <b id="hHomeBy" class="h-extra"></b>
+    <small id="hHomeBySub" class="h-extra"></small>
+  </div>
+  <div class="h-right">
+    <div class="lbl">Walk home</div>
+    <b id="hBack"></b>
+    <div class="o2bar" id="hO2bar"><i id="hO2"></i></div>
+    <small id="hO2txt"></small>
+    <div class="lbl sp h-extra">Time outside so far</div>
+    <b id="hOut" class="h-extra"></b>
+    <small id="hOutSub" class="h-extra"></small>
+    <div class="lbl sp h-extra">Here</div>
+    <b id="hHere" class="h-extra"></b>
+  </div>
+  <div class="h-checks" id="hChecks"></div>
+  <div class="h-bottom">
+    <span class="lbl" id="hNextLbl">Next stop</span>
+    <b id="hNext"></b>
+    <small id="hNextSub"></small>
+  </div>
+  <div class="h-hint" id="hHint">Drag to look around</div>
+</section>
+
+<section id="drill" class="pnl drill-card" role="dialog" aria-label="Bad-day drill" hidden></section>
+
+<footer id="clock" class="pnl">
+  <button id="playBtn" class="cta" aria-label="Walk the plan"><span class="tri"></span><span class="pl">Walk the plan</span></button>
+  <button id="speedBtn" class="ghost" title="How fast the clock runs">×1</button>
+  <div id="track" role="slider" aria-label="Mission time" aria-valuemin="0" tabindex="0">
+    <div class="trk-hours" id="trkHours"></div>
+    <div class="trk-line"></div>
+    <div class="trk-done" id="trkDone"></div>
+    <div class="trk-stops" id="trkStops"></div>
+    <div class="trk-head" id="trkHead"></div>
+  </div>
+  <div class="clock-btns">
+    <button id="tightBtn" class="ghost" title="Jump to the tightest moment of the plan">Tightest moment</button>
+    <button id="hurtBtn" class="hurt">Crewmate hurt here</button>
+  </div>
+</footer>
+
+<div id="real" class="tag"><b>REAL TERRAIN</b><span id="realTxt">HiRISE 1 m elevation model · true vertical scale</span></div>
+
+<section id="credits" class="pnl" hidden aria-label="Credits">
+  <button class="x" id="creditsClose" aria-label="Close">&times;</button>
+  <div class="lbl-lg">Credits</div>
+  <p><b>More in 3D.</b> <a href="../3d/">Walk the route yourself</a> in first or third person with the helmet display (that page shows an AI-generated astronaut model, labelled on screen). Back to the <a href="../">Red Route planner</a>.</p>
+  <p><b>Terrain.</b> HiRISE digital terrain model of Jezero Crater, 1 m (USGS Astrogeology, Mars 2020 landing products). Credit: NASA/JPL/University of Arizona/USGS. Shown here on the app's 4 m grid at true vertical scale.</p>
+  <p><b>Ground picture.</b> The real orbital photo of the same ground: the HiRISE 25 cm orthomosaic of Jezero (NASA/JPL/University of Arizona, mosaic by USGS Astrogeology), tiles from NASA JPL Mars Trek, stitched to the terrain grid. The photo is black and white; our code gives it a Mars tone.</p>
+  <p><b>Route and numbers.</b> The same plan and the same rules as the Red Route app. Stops are places where NASA's Perseverance rover worked (NASA/JPL-Caltech).</p>
+  <p><b>Software.</b> three.js r169 (MIT licence). Barlow fonts (SIL Open Font License). Both are stored with this page; nothing loads from another site.</p>
+  <p><b>What is drawn, not data.</b> The two crew figures and the base-camp module are simple shapes made by our code. The sky, the sun and the fine ground grain are drawn by our code too. Outside the mapped area (4.7 km by 2.1 km) the ground is a flat placeholder.</p>
+  <p><b>No AI-made pictures.</b> The helmet rim in the helmet view is drawn by our code. No AI-made images or models are used on this page.</p>
+  <p><b>AI use.</b> The code of this page was written by an AI coding assistant (Claude, by Anthropic), directed by the team.</p>
+  <p class="dim">The clock runs fast: the label next to the play button gives the speed.</p>
+</section>
+
+<section id="film" hidden aria-label="Drill film">
+  <button class="x" id="filmClose" aria-label="Close the film">&times;</button>
+  <video id="filmVideo" controls playsinline preload="none" src="film/red_route_drill.mp4"></video>
+  <div class="film-note">3D animation made in Blender on the real terrain. Not footage.</div>
+</section>
+
+<script type="module" src="main.js?v=3"></script>
+</body>
+</html>

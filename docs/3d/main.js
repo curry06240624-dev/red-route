@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=14";
-import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=14";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=14";
-import { makeFx } from "./fx.js?v=14";
-import { Rocks, Footprints, Dust } from "./props.js?v=14";
-import { Sound } from "./sound.js?v=14";
+import * as P from "./plan.js?v=15";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=15";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=15";
+import { makeFx } from "./fx.js?v=15";
+import { Rocks, Footprints, Dust } from "./props.js?v=15";
+import { Sound } from "./sound.js?v=15";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
