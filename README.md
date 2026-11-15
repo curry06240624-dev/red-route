@@ -62,6 +62,16 @@ python -m http.server 8765 --directory docs
 Python packages: numpy, scipy, scikit-image, rasterio, pillow. The web app uses the Leaflet map library and the Barlow fonts.
 All data, software and font credits are in DATA.md.
 
+## Tests
+Automated tests with Node's built-in test runner (no packages to install; checked with Node 24). From the repo folder:
+```bash
+node --test tests/
+```
+62 tests pass. They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
+T+2:11 and T+2:37), recompute it from the stored walk profile, check that no point of the walk is steeper than 15°,
+recount the rover tilt test from its stored pairs, and run the browser's route engine (`docs/router.js`) on the 4 m
+grid: the default walk comes out close to the stored 2 m plan, and with Tenby added both time checks fail (57 and 95 min).
+
 ## Use of AI tools
 The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
 first version of the site, the science stops and the route rules; the team reviewed and approved them and
