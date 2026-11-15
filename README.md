@@ -25,7 +25,7 @@ landing circle with slopes under 5°.
 - **Thermal:** an optional night-time infrared layer from Mars Odyssey THEMIS (100 m pixels, via Mars Trek): rock stays warmer at night, loose sand and dust cool faster. Context only; not used in the route.
 - **Safety:** three get-home checks, each with its breaking point (how much slower the walk can be before it fails), a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, the 50-minute backup-oxygen line, and bad-day drill buttons (crewmate hurt, suit alarm, storm warning, running late) that answer from the crew's position.
 - **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
-- **Conditions:** NASA DONKI space-weather notices (read live from NASA's CCMC service; NOT CHECKED if it does not answer), the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live), and a quiet-day radiation dose for the walk from Curiosity RAD's published average at Gale Crater (for scale only).
+- **Conditions:** NASA DONKI space-weather notices (read live from NASA's CCMC service; NOT CHECKED if it does not answer), the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live), and a quiet-day radiation dose for the walk from Curiosity RAD's published average at Gale Crater (for scale only). The storm drill can replay the solar storm of 20 May 2024 from Curiosity RAD's archived readings (NASA PDS): 37 minutes from the alarm to the strongest reading, and the dose on the walk home.
 - **Deciding check:** the checks panel names the one check that decides the plan, where and when (default walk: the suit-failure check at Three Forks, about 8 min of backup oxygen to spare), and pins it on the map.
 - **Straight lines:** a layer that draws straight lines between our own stops and marks where they cross no-go ground (default walk: 58 m; the planned route crosses none).
 - **What if here?:** a map button; with it on, a click anywhere gives the walk home from that spot, the latest time to leave it (half-speed rule), and whether it is inside the 50-minute backup-oxygen line. Read from the walk-home layer.
@@ -76,7 +76,7 @@ Automated tests with Node's built-in test runner (no packages to install; checke
 ```bash
 node --test
 ```
-75 tests pass (62 for the plan and the route engine, 8 for the Mars daylight method, 5 that re-run the 1,000-walk simulation). They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
+84 tests pass (62 for the plan and the route engine, 8 for the Mars daylight method, 5 that re-run the 1,000-walk simulation, 9 for the storm replay). They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
 T+2:11 and T+2:37), recompute it from the stored walk profile, check that no point of the walk is steeper than 15°,
 recount the rover tilt test from its stored pairs, and run the browser's route engine (`docs/router.js`) on the 4 m
 grid: the default walk comes out close to the stored 2 m plan, and with Tenby added both time checks fail (57 and 95 min).

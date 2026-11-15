@@ -239,7 +239,9 @@
   /* Radiation, for scale only (no pass or fail). Both numbers were read in their sources on 15 Nov 2026:
      - 0.210 ± 0.040 mGy a day: average galactic-cosmic-ray dose rate on the surface at Gale Crater, measured by
        Curiosity's RAD over about 300 sols (Hassler et al. 2014, Science 343, 1244797, doi:10.1126/science.1244797).
-     - 8,100 micrograys: what RAD measured in the solar storm of 20 May 2024 (NASA/JPL news release, 10 June 2024). */
+     - 8,100 micrograys: what NASA reported for a person next to Curiosity in the solar storm of 20 May 2024 (NASA/JPL
+       news release, 10 June 2024). Quoted for scale only. The release does not say how it was worked out, and our own
+       sum of RAD's archived readings (extra/storm-replay.js) is a different measure, so nothing is computed from it. */
   const RAD = { gale_mgy_day: 0.21, storm_ugy: 8100,
     paper: "https://doi.org/10.1126/science.1244797", storm: "https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/" };
   /* Results of two checks that are run outside the browser. Both are re-run by the tests (tests/bad-day-simulation.test.js
@@ -280,7 +282,7 @@
       html += `<div class="cond-row"><span>Daylight${stag("d", "how-data")}</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable (sunrise to sunset, less 2 h of margin, our choice) vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
     const dose = walkDoseUGy(S.m);
-    html += `<div class="cond-row" id="radRow"><span>Radiation${stag("d", "how-numbers")}</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average that Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value. Jezero sits about 2 km higher, so we expect a little more there (our estimate). For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024 (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
+    html += `<div class="cond-row" id="radRow"><span>Radiation${stag("d", "how-numbers")}</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average that Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value. Jezero sits about 2 km higher, so we expect a little more there (our estimate). For scale, NASA reported that a person next to Curiosity would have received ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the solar storm of 20 May 2024 (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). The storm drill can replay that storm from RAD's own readings. Shown for scale, not a pass or fail.</span></div>`;
     $("#conditions").innerHTML = html;
   }
 
@@ -798,7 +800,7 @@
   $("#aDrills").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
   drillEl.addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b || b.classList.contains("stag")) return;
-    if (b.dataset.warn) { drill.warn = +b.dataset.warn; renderDrill(); }
+    if (b.dataset.warn) { drill.warn = b.dataset.warn === "real" ? "real" : +b.dataset.warn; renderDrill(); }
     else if (b.dataset.late === "more") { drill.late = Math.min(LATE_MAX, drill.late + 10); renderDrill(); }
     else if (b.dataset.late === "clear") closeDrill();
     else if (b.dataset.close != null) closeDrill();
@@ -844,6 +846,8 @@
     return pts;
   }
 
+  const stormDay = (SR) => new Date(`${SR.day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
   function openDrill(type) {
     if (!S.m || !eva.nav || eva.nav.st.after) return;
     if (eva.playing) pause();
@@ -887,12 +891,25 @@
       note = `Same rule as the "Suit failure" check: 1 h of backup oxygen, about ${GET_INSIDE_MIN} min of it to get inside.`;
     } else if (drill.type === "storm") {
       // rounded toward the unsafe side: the walk home is rounded up, so a spare is rounded down and a shortfall up
-      const backUp = Math.ceil(n.back - 1e-9), need = backUp + GET_INSIDE_MIN, spare = drill.warn - need, dose = walkDoseUGy(m);
+      const SR = window.StormReplay, real = drill.warn === "real" && !!SR;
+      const warn = real ? Math.floor(SR.alarmToPeakMin) : (drill.warn === "real" ? 30 : drill.warn);
+      const backUp = Math.ceil(n.back - 1e-9), need = backUp + GET_INSIDE_MIN, spare = warn - need;
+      const picks = [15, 30, 60].map((w) => `<button data-warn="${w}" class="${!real && w === warn ? "on" : ""}">${w} min</button>`).join("")
+        + (SR ? `<button data-warn="real" class="${real ? "on" : ""}">Real storm</button>` : "");
       title = "Storm warning";
       body = row("Walk home from here", fmtMin(backUp)) + row("Get inside (same as the suit check)", `${GET_INSIDE_MIN} min`)
-        + `<div class="dr"><span>Warning time (what-if, you pick)${stag("a", "drillHow")}</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
-        + verdict(spare >= 0, spare >= 0 ? `inside with ${fmtMin(spare)} to spare` : `${fmtMin(spare)} short of shelter`);
-      note = `${spare >= 0 ? "" : `With a ${drill.warn}-min warning the crew would have to stay within ${drill.warn - GET_INSIDE_MIN} min of walking from base. `}A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024. That is about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times the quiet-day dose of this whole walk (see Radiation under Conditions).`;
+        + `<div class="dr"><span>Warning time${real ? "" : " (what-if, you pick)"}${stag(real ? "d" : "a", "drillHow")}</span><span class="dpick">${picks}</span></div>`;
+      if (real) {
+        // the solar storm of 20 May 2024, as Curiosity's RAD measured it (extra/storm-replay.js)
+        const w = SR.walkHome(need), rnd = (x) => (x >= 100 ? Math.round(x / 10) * 10 : Math.round(x));
+        body += row("20 May 2024: alarm to strongest reading", `${warn} min <small>measured by Curiosity's RAD in Gale Crater</small>`)
+          + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the strongest reading began` : `not inside until ${fmtMin(spare)} after the strongest reading began`, spare >= 0 ? "INSIDE BEFORE THE PEAK" : "STILL OUTSIDE AT THE PEAK")
+          + row(`Radiation until inside (${fmtMin(w.minutes)}${w.cut ? ", where our readings end" : ""})`, `about ${rnd(w.ugy)} µGy <small>the same minutes on a quiet day: about ${rnd(w.quiet_ugy)} µGy</small>`);
+        note = `A replay, not a forecast: Curiosity's RAD readings for the solar storm of ${stormDay(SR)} in Gale Crater, from NASA's PDS archive (our reading). The alarm is the first reading above ${SR.alarmX} times the normal level, which is our choice. Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm itself arriving: this data holds no earlier warning. Measured on the rover's deck, not in a suit.`;
+      } else {
+        body += verdict(spare >= 0, spare >= 0 ? `inside with ${fmtMin(spare)} to spare` : `${fmtMin(spare)} short of shelter`);
+        note = `${spare >= 0 ? "" : `With a ${warn}-min warning the crew would have to stay within ${warn - GET_INSIDE_MIN} min of walking from base. `}A what-if, not a forecast: real warning times depend on the storm.${SR ? ' "Real storm" replays the solar storm of 20 May 2024 from Curiosity\'s readings.' : ""}`;
+      }
     } else {
       const D = drill.late, P = m.profile, tl = m.timeline || [], lastT = P[P.length - 1].t;
       let wPlan = Infinity, wBad = Infinity;   // the tightest moments from now on, with the delay added
@@ -1335,6 +1352,12 @@
     rows.push(["Does the bad-day rule pay off?",
       `Three plans on the same stops, in the same ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment). A plan made with the usual walk-back rule, using all the time that rule allows, needed its reserve ${BENEFIT.usual} times. A plan made with our rule, using all the time it allows: ${BENEFIT.maxed} times. Our own plan, which also keeps ${BENEFIT.plan_spare_min} min spare: ${BENEFIT.ours} times.`,
       `The first two plans are our own constructions, and the slowdown range is assumed. Our rule costs ${BENEFIT.rule_cost_min} min at the science stops, and our plan keeps ${BENEFIT.plan_spare_min} more as spare. With walks up to 30 % slower the three numbers are ${BENEFIT.usual30}, ${BENEFIT.maxed30} and ${BENEFIT.ours30}. Nobody went past the suit limit in any run.`]);
+    if (window.StormReplay) {
+      const SR = window.StormReplay, warn = Math.floor(SR.alarmToPeakMin), need = Math.ceil(wb.suit.worst.back - 1e-9) + GET_INSIDE_MIN, w = SR.walkHome(need);
+      rows.push(["What would a real solar storm do to this walk?",
+        `We replayed the storm of ${stormDay(SR)} from the readings of Curiosity's RAD. From the alarm to the strongest reading: ${warn} min. From the farthest point of this walk the crew needs ${need} min to be inside, so it is ${need > warn ? "still outside at the peak" : "inside before the peak"}, and takes about ${Math.round(w.ugy / 10) * 10} µGy on the way (the same minutes on a quiet day: about ${Math.round(w.quiet_ugy)}).`,
+        `Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm arriving: this data holds no earlier warning. Measured on the rover's deck in Gale Crater, not in a suit in Jezero. The alarm line, ${SR.alarmX} times normal, is our choice.`]);
+    }
     rows.push(["Do the stored plan and the browser agree?",
       `The stored plan comes from a 2 m grid: +${wb.worst.margin_min} min, +${wb.bad.worst.margin_min} min and ${wb.suit.worst.back} min. The browser re-plans on a 4 m grid: +${ENGINE4.plan}, +${ENGINE4.bad} and ${ENGINE4.suit}.`,
       "After you move a stop or a slider, the numbers on screen are the 4 m ones. They can differ from the stored plan by up to about a minute."]);
@@ -1342,7 +1365,7 @@
       `No. Within ${sc.radius_m} m of it the ground reaches ${sc.slope_max}°. NASA's Artemis III EVA study draws a 100 m landing circle with slopes under 5°.`,
       "Failed, and we say so. Base camp was placed on top of the delta so that the loop fits the time rules."]);
     rows.push(["Are the numbers re-checked?",
-      "75 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method and the 1,000-walk simulation (node --test).",
+      "84 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method, the 1,000-walk simulation and the storm replay (node --test).",
       "They test the numbers and the route engine, not the screens. The screens were checked in a browser by an AI reviewer, on a desktop size and a phone size."]);
     return `<h3 id="how-checked">What we checked, and what failed</h3>
       <table class="chk-tbl"><tr><th>We asked</th><th>We checked</th><th>Limit, or what failed</th></tr>
@@ -1375,10 +1398,11 @@
         <tr><td>Suit time limit</td><td>${a.eva_limit_h} h</td><td>NASA suit design limit (EVA-EXP-0042)</td></tr>
         <tr><td>Reserve</td><td>${Math.round(a.reserve * 100)} %</td><td>Our choice. NASA plans about 6 h inside an 8 h suit (EVA-EXP-0042); we keep a little more</td></tr>
         <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr>
-        <tr><td>Radiation dose rate</td><td>${RAD.gale_mgy_day} mGy a day (quiet Sun, Gale Crater)</td><td>Curiosity's RAD, average over about 300 sols (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). The May 2024 storm value, about ${RAD.storm_ugy.toLocaleString("en-US")} microgray, is from <a href="${RAD.storm}" target="_blank" rel="noopener">NASA/JPL</a>. For scale only: the app does not check a dose limit.</td></tr></table>
+        <tr><td>Radiation dose rate</td><td>${RAD.gale_mgy_day} mGy a day (quiet Sun, Gale Crater)</td><td>Curiosity's RAD, average over about 300 sols (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). For the solar storm of May 2024, <a href="${RAD.storm}" target="_blank" rel="noopener">NASA/JPL</a> reported ${RAD.storm_ugy.toLocaleString("en-US")} microgray for a person next to Curiosity. We quote that number and do not compute with it: the release does not say how it was worked out, and our own sum of RAD's archived readings (about 1,750 microgray in the plastic detector over the first 24 h) is not the same measure. For scale only: the app does not check a dose limit.</td></tr></table>
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
       <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast. The storm drill counts the walk home plus about ${GET_INSIDE_MIN} min to get inside, the same allowance as the suit check.</p>
+      ${window.StormReplay ? `<p><b>Real storm.</b> The storm drill can also replay the solar storm of ${stormDay(window.StormReplay)} as Curiosity's Radiation Assessment Detector (RAD) measured it in Gale Crater. The readings are from NASA's Planetary Data System (<a href="${window.StormReplay.source}" target="_blank" rel="noopener">data set MSL-M-RAD-3-RDR-V1.0</a>, sol 4190, the plastic detector E, in micrograys an hour). The normal level before the storm was ${window.StormReplay.quiet} micrograys an hour. Our alarm is the first reading above ${window.StormReplay.alarmX} times that; it ended at ${window.StormReplay.alarm.atUtc} UTC. The strongest reading, ${Math.round(window.StormReplay.peak.e)} micrograys an hour (${Math.round(window.StormReplay.peak.timesQuiet)} times normal), began ${Math.floor(window.StormReplay.alarmToPeakMin)} min later. The dose on the way home holds each reading until the next one starts. What is ours, not NASA's: the alarm line and every sum. Limits: readings are 8 to 16 min long, so the ${Math.floor(window.StormReplay.alarmToPeakMin)} min could be ${window.StormReplay.range_min[0]} to ${window.StormReplay.range_min[1]}; the rise is the storm arriving, so this data holds no earlier warning; RAD sits on the rover's deck in Gale Crater, not in a suit in Jezero; and the detector gives a dose in plastic, not a dose to a person. In May 2024 the normal level (0.13 mGy a day) was lower than the 2012 to 2013 average used under Conditions (${RAD.gale_mgy_day} mGy a day).</p>` : ""}
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} waypoint records inside our area (a few spots were logged more than once) our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}
