@@ -1551,6 +1551,8 @@
       <h3>Where it can be wrong</h3>
       <ul><li>Rocks smaller than about 1.5 m are not in the elevation model. Crews still need the photos to spot boulders.</li>
         <li>The walking curve is Earth-calibrated. Real suited speed depends on the suit, the load and fatigue.</li>
+        <li>The walking time uses how steep the ground is, not which way the crew walks on it: uphill, downhill and across a slope cost the same.</li>
+        <li>The tilt test only covers ground the rover drove on, which is mostly gentle. It says little about ground close to the ${a.max_slope_deg}° line.</li>
         <li>Solar-particle alerts come from sensors near Earth. Eruption (CME) alerts include Mars arrival times.</li>
         <li>The public MEDA weather summaries end in 2024, so the daylight check uses the latest available sols.</li>
         <li>The radiation number is a quiet-day average measured at Gale Crater, not at Jezero. It is shown for scale and is not checked against a limit.</li>
