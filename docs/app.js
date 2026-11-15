@@ -1300,7 +1300,8 @@
     try { seen = localStorage.getItem(GUIDE_KEY) === "seen"; } catch (e) { /* ignore */ }
     if (!seen) openGuide();
   }
-  $("#guideGo").onclick = () => { closeGuide(); play(); };
+  // phones: the guide sits under the clock, so go back to the top first, where the map and the crew dot are
+  $("#guideGo").onclick = () => { closeGuide(); if (isMobile()) window.scrollTo({ top: 0, behavior: "smooth" }); play(); };
   $("#guideClose").onclick = closeGuide;
   $("#helpBtn").onclick = () => ($("#guide").hidden ? openGuide() : closeGuide());
 
