@@ -9,7 +9,7 @@
 //              with the spare minutes spent at the last stop, as a planner using that rule may do;
 //  FIRST     = our own first plan (4 stops), made before the airlock time was counted.
 // "Touched the reserve" = got home after the reserve-free budget (T+216 min). "Over the suit limit" = after T+360 min
-// (8 h minus the 2 h airlock). Usage: node benefit_test.mjs <red-route/docs dir> [out.json]
+// (8 h minus the 2 h airlock). Usage: node bad_day_simulation.mjs <red-route/docs dir> [out.json]
 // AI use: this script was written by an AI coding assistant (Claude, by Anthropic), directed by the team.
 import fs from "node:fs";
 import vm from "node:vm";
@@ -17,7 +17,7 @@ import path from "node:path";
 
 const docs = process.argv[2];
 const outPath = process.argv[3];
-if (!docs) throw new Error("usage: node benefit_test.mjs <red-route/docs dir> [out.json]");
+if (!docs) throw new Error("usage: node bad_day_simulation.mjs <red-route/docs dir> [out.json]");
 const m = JSON.parse(fs.readFileSync(path.join(docs, "data/mission.json"), "utf8"));
 let src = fs.readFileSync(path.join(docs, "router.js"), "utf8");
 // In this copy only: also return the full (not thinned) profile.

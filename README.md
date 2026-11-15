@@ -49,7 +49,7 @@ landing circle with slopes under 5°.
 - Our slope map agrees with Perseverance's own tilt sensor at 189 rover stops: 1.33° average difference, 93 % within 3°.
 - On the rover's climb to the delta top (sols 693–736), a straight line would cross 154 m of slopes steeper than 15°; our planned walk crosses none (`tools/rover_check.py` draws the map).
 
-- In 1,000 simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment), the same stops planned with the usual walk-back rule needed the reserve 320 times; our plan, 18 times. The comparison plan is our own, and the slowdown range is assumed. Re-run: `node validation/benefit_test.mjs docs`.
+- In 1,000 simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment), the same stops planned with the usual walk-back rule needed the reserve 320 times; our plan, 18 times. The comparison plan is our own, and the slowdown range is assumed. Re-run: `node validation/bad_day_simulation.mjs docs`.
 - "How it works" in the app has a table, "What we checked, and what failed", with a limit next to every claim.
 
 These are planning assumptions for a hackathon prototype, not NASA flight rules. They are listed in the app under "How it works".

@@ -243,7 +243,7 @@
   const RAD = { gale_mgy_day: 0.21, storm_ugy: 8100,
     paper: "https://doi.org/10.1126/science.1244797", storm: "https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/" };
   /* Results of two checks that are run outside the browser and re-checked by the tests:
-     - BENEFIT: validation/benefit_test.mjs (seed 20261115). 1,000 simulated walks, each up to 20 % slower than planned
+     - BENEFIT: validation/bad_day_simulation.mjs (seed 20261115). 1,000 simulated walks, each up to 20 % slower than planned
        with a crewmate hurt at a random moment; "usual" is the same stops planned with the normal-pace walk-back rule
        only, its spare 43 min spent at the last stop. Counted: walks that had to use the reserve.
      - ENGINE4: the default walk re-planned by the browser's engine on the 4 m grid (the stored plan is from a 2 m grid). */
