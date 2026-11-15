@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=13";
-import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=13";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=13";
-import { makeFx } from "./fx.js?v=13";
-import { Rocks, Footprints, Dust } from "./props.js?v=13";
-import { Sound } from "./sound.js?v=13";
+import * as P from "./plan.js?v=14";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=14";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=14";
+import { makeFx } from "./fx.js?v=14";
+import { Rocks, Footprints, Dust } from "./props.js?v=14";
+import { Sound } from "./sound.js?v=14";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -420,15 +420,7 @@ function update(dt) {
   // crew
   const y = G.height(S.pos.x, S.pos.z), rate = Math.max(0.9, Math.min(1.9, 0.85 + S.speed / 45));
   ev1.place(S.pos.x, y, S.pos.z, S.heading); ev1.update(dt, moving > 0.05 ? 1 : 0, rate);
-  const h = S.heading * DEG, port = camera.aspect < 1, offR = port ? 1.0 : 2.1, offF = port ? 4.2 : 4.6;
-  const tx = S.pos.x + Math.cos(h) * offR + Math.sin(h) * offF, tz = S.pos.z + Math.sin(h) * offR - Math.cos(h) * offF;
-  if (!S.ev2init) { ev2.x = tx; ev2.z = tz; ev2.hdg = S.heading; S.ev2init = true; }
-  const k = Math.min(1, dt * (4 + S.speed * 0.25 * (moving > 0 ? 1 : 0.2))), ox = ev2.x, oz = ev2.z;
-  const nx2 = ox + (tx - ox) * k, nz2 = oz + (tz - oz) * k, gap = Math.hypot(tx - nx2, tz - nz2);
-  const ev2moving = moving > 0.05 || gap > 0.25;
-  const hd2 = gap > 0.4 && !(moving > 0.05) ? (Math.atan2(tx - ox, -(tz - oz)) / DEG + 360) % 360 : S.heading;
-  ev2.place(nx2, G.height(nx2, nz2), nz2, turn(ev2.hdg || S.heading, hd2, Math.min(1, dt * 6)));
-  ev2.update(dt, ev2moving ? 1 : 0, rate);
+  const ev2moving = moveEv2(dt, moving > 0.05, rate);
   // rocks around the crew, footprints behind them, dust at their feet
   rocks.update(S.pos.x, S.pos.z);
   if (moving > 0.05 && prints.track(1, S.pos.x, S.pos.z, S.heading)) { dust.puff(prints.v.x, prints.v.y, prints.v.z); sound.step(); }
@@ -439,6 +431,69 @@ function update(dt) {
   sky.material.uniforms.uTime.value += dt;
   lights.sun.position.set(S.pos.x + SUN_DIR.x * 80, y + SUN_DIR.y * 80, S.pos.z + SUN_DIR.z * 80);
   lights.sun.target.position.set(S.pos.x, y, S.pos.z); lights.sun.target.updateMatrixWorld();
+}
+
+/* ---------- EV2, the crewmate ----------
+   On the planned route EV2 walks a few steps ahead on the path (EV2 knows the plan). Off the route EV2 follows in EV1's tracks.
+   EV2 turns before walking, walks only the way it faces (no sliding), stops when it has caught up, and waits facing EV1. */
+const E2 = { x: 0, z: 0, hdg: 0, moving: false, trail: [], px: 0, pz: 0, v1: 0 };
+function ev2Target() {
+  const m = S.m;
+  let d = null;   // how far along the whole walk EV1 is, when EV1 is on the planned route
+  if (S.mode === "plan") { const n = P.navOnPlan(m, S.route, S.T); if (!n.after) d = n.d; }
+  else if (S.nav && S.nav.src === "plan" && S.nav.d != null && !S.free.home) d = S.nav.d;
+  if (d != null && d + 6.5 < S.route.length) {
+    const a = P.pointAtDistance(S.route, d + 5.5), b = P.pointAtDistance(S.route, d + 6.5);
+    const ax = G.xOf(a[1]), az = G.zOf(a[0]), fx = G.xOf(b[1]) - ax, fz = G.zOf(b[0]) - az, L = Math.hypot(fx, fz) || 1;
+    return { x: ax - (fz / L) * 1.2, z: az + (fx / L) * 1.2 };   // 1.2 m to the right of the path, so EV1 can see past
+  }
+  if (d != null || (S.mode === "free" && S.free.home)) {   // the end of the walk: stand beside EV1
+    const h = S.heading * DEG;
+    return { x: S.pos.x + Math.cos(h) * 1.8 - Math.sin(h) * 0.4, z: S.pos.z + Math.sin(h) * 1.8 + Math.cos(h) * 0.4 };
+  }
+  // off the route: beside EV1 and a step behind, along EV1's own tracks (2 m to the side, so EV1's view stays clear)
+  const T = E2.trail;
+  let acc = 0;
+  for (let i = T.length - 1; i > 0; i--) {
+    const seg = Math.hypot(T[i].x - T[i - 1].x, T[i].z - T[i - 1].z);
+    if (acc + seg >= 1.5) {
+      const f = (1.5 - acc) / (seg || 1), x = T[i].x + (T[i - 1].x - T[i].x) * f, z = T[i].z + (T[i - 1].z - T[i].z) * f;
+      const fx = (T[i].x - T[i - 1].x) / (seg || 1), fz = (T[i].z - T[i - 1].z) / (seg || 1);
+      return { x: x - fz * 2.0, z: z + fx * 2.0 };
+    }
+    acc += seg;
+  }
+  const h = S.heading * DEG;
+  return { x: S.pos.x - Math.sin(h) * 1.5 + Math.cos(h) * 2.0, z: S.pos.z + Math.cos(h) * 1.5 + Math.sin(h) * 2.0 };
+}
+function moveEv2(dt, ev1Moving, rate) {
+  // EV1's tracks, and how fast EV1 is moving on screen
+  const T = E2.trail, lastT = T[T.length - 1];
+  if (!lastT || Math.hypot(S.pos.x - lastT.x, S.pos.z - lastT.z) > 0.35) { T.push({ x: S.pos.x, z: S.pos.z }); if (T.length > 70) T.shift(); }
+  const jumped = Math.hypot(S.pos.x - E2.px, S.pos.z - E2.pz) > 12;
+  E2.v1 += ((jumped ? 0 : Math.hypot(S.pos.x - E2.px, S.pos.z - E2.pz) / Math.max(dt, 1e-3)) - E2.v1) * Math.min(1, dt * 5);
+  E2.px = S.pos.x; E2.pz = S.pos.z;
+  if (jumped) T.length = 0;
+  const t = ev2Target();
+  if (!S.ev2init || jumped || Math.hypot(t.x - E2.x, t.z - E2.z) > 45) { E2.x = t.x; E2.z = t.z; E2.hdg = S.heading; E2.moving = false; S.ev2init = true; }
+  const dx = t.x - E2.x, dz = t.z - E2.z, dist = Math.hypot(dx, dz);
+  E2.moving = dist > (E2.moving ? 0.2 : 0.85);
+  let want = E2.hdg, sp = 0;
+  if (E2.moving) {
+    want = (Math.atan2(dx, -dz) / DEG + 360) % 360;
+    sp = Math.min(Math.max(E2.v1 * 1.3, 0.56 * S.speed * 0.8, 0.9), dist * 3.5 + 0.3);
+  } else if (!ev1Moving && Math.hypot(S.pos.x - E2.x, S.pos.z - E2.z) > 0.6) want = (Math.atan2(S.pos.x - E2.x, -(S.pos.z - E2.z)) / DEG + 360) % 360;   // waiting: face the crewmate
+  const diff = ((want - E2.hdg + 540) % 360) - 180, maxTurn = (E2.moving ? 280 : 110) * Math.max(1, S.speed / 12) * dt;
+  E2.hdg = (E2.hdg + Math.sign(diff) * Math.min(Math.abs(diff), maxTurn) + 360) % 360;
+  if (sp > 0) {
+    const h = E2.hdg * DEG, step = Math.min(dist, sp * dt * Math.max(0, Math.cos(diff * DEG)));
+    E2.x += Math.sin(h) * step; E2.z -= Math.cos(h) * step;
+  }
+  const walking = E2.moving && Math.abs(diff) < 75;
+  ev2.place(E2.x, G.height(E2.x, E2.z), E2.z, E2.hdg);
+  ev2.look = walking ? null : [S.pos.x, S.pos.z];
+  ev2.update(dt, walking ? 1 : 0, rate);
+  return walking;
 }
 
 /* ---------- camera: first person, third person, the cinema camera, and the fly-in at the start ---------- */

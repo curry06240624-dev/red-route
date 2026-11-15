@@ -77,6 +77,7 @@ export class Astronaut {
     const f = codeFigure(bandColor);
     this.fig = f; this.root.add(f.g);
     this.mixer = null; this.phase = 0; this.w = 0; this.isAI = false;
+    this.t = 0; this.seed = Math.random() * 50; this.headYaw = 0; this.headGoal = 0; this.nextLook = 0; this.look = null; this.bones = null;
     this.x = 0; this.z = 0; this.hdg = 0;
   }
   useModel(model) {
@@ -99,6 +100,8 @@ export class Astronaut {
     }
     this.root.remove(this.fig.g); this.fig = null;
     this.model = obj; this.root.add(obj);
+    const bone = (...names) => { for (const n of names) { const b = obj.getObjectByName(n); if (b) return b; } return null; };
+    this.bones = { head: bone("Head"), neck: bone("neck", "Neck"), spine: bone("Spine01", "Spine"), hips: bone("Hips") };
     if (model.walk) {
       this.mixer = new THREE.AnimationMixer(obj);
       this.aWalk = this.mixer.clipAction(model.walk); this.aIdle = this.mixer.clipAction(model.idle);
@@ -114,13 +117,40 @@ export class Astronaut {
     if (this.mixer) {
       this.aWalk.setEffectiveWeight(this.w); this.aIdle.setEffectiveWeight(1 - this.w);
       this.aWalk.timeScale = rate;
+      // take last frame's small standing motion off again first: the mixer only writes a bone when its own value changed,
+      // so without this the motion would pile up frame after frame
+      if (this.saved) for (const [bn, q] of this.saved) bn.quaternion.copy(q);
       this.mixer.update(dt);
+      this.standAlive(dt);
     } else if (this.fig) {
       this.phase += dt * 5.2 * rate * (this.w > 0.05 ? 1 : 0);
       const a = Math.sin(this.phase) * 0.55 * this.w, p = this.fig.parts;
       p.lLeg.rotation.x = a; p.rLeg.rotation.x = -a; p.lArm.rotation.x = -a * 0.7; p.rArm.rotation.x = a * 0.7;
       this.fig.g.position.y = Math.abs(Math.cos(this.phase)) * 0.03 * this.w;
     }
+  }
+  // While standing: breathing, a slow shift of weight, and the head looking around, or at this.look = [x, z] (the crewmate).
+  // Added on top of the standing pose each frame; it fades out as the walk fades in.
+  standAlive(dt) {
+    const b = this.bones, k = 1 - this.w;
+    this.t += dt;
+    if (!b) return;
+    if (!this.saved) this.saved = Object.values(b).filter(Boolean).map((bn) => [bn, bn.quaternion.clone()]);
+    for (const [bn, q] of this.saved) q.copy(bn.quaternion);   // the pose the animation gave this frame
+    if (k < 0.02) { this.headYaw *= 0.9; return; }
+    const t = this.t + this.seed;
+    if (this.t > this.nextLook) { this.nextLook = this.t + 2.5 + Math.random() * 4.5; this.headGoal = (Math.random() - 0.5) * 1.0; }
+    let goal = this.headGoal;
+    if (this.look) {
+      const want = (Math.atan2(this.look[0] - this.x, -(this.look[1] - this.z)) * 180) / Math.PI;
+      const rel = ((want - this.hdg + 540) % 360) - 180;
+      goal = (-Math.max(-65, Math.min(65, rel)) * Math.PI) / 180;   // the head turns about the bone's own up axis; left is positive
+    }
+    this.headYaw += (goal - this.headYaw) * Math.min(1, dt * 2.2);
+    if (b.neck) b.neck.rotateY(this.headYaw * 0.4 * k);
+    if (b.head) { b.head.rotateY(this.headYaw * 0.6 * k); b.head.rotateX(Math.sin(t * 0.7) * 0.03 * k); }
+    if (b.spine) { b.spine.rotateX(Math.sin(t * 1.5) * 0.016 * k); b.spine.rotateY(this.headYaw * 0.18 * k); }
+    if (b.hips) b.hips.rotateZ(Math.sin(t * 0.41) * 0.02 * k);
   }
   // world position (feet on the ground) and compass heading in degrees
   place(x, y, z, hdg) {

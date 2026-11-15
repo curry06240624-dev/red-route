@@ -46,7 +46,7 @@ export function makeFx(renderer, scene, camera) {
   const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.34, 0.72, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.27, 0.72, 1.05);
   composer.addPass(bloom);
   const grade = new ShaderPass(Grade);
   composer.addPass(grade);
