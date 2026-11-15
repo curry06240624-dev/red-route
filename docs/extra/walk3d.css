@@ -1,0 +1,5 @@
+/* AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md.
+   Red Route add-on: the 3D walk button (next to "Astronaut view") and the full-page frame it opens. */
+.walk3d-open svg { display: block; }
+.walk3d-frame { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 3200; background: #120d0b; }
+.walk3d-frame[hidden] { display: none; }

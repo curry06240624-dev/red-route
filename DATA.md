@@ -47,6 +47,8 @@ Astrogeology PDS Annex, U.S. Geological Survey.
 |---|---|---|---|
 | Leaflet 1.9.4 | The map in the web app (loaded from cdnjs) | BSD 2-Clause | https://leafletjs.com/ |
 | Barlow and Barlow Semi Condensed, by Jeremy Tribby | Fonts (loaded from Google Fonts) | SIL Open Font License 1.1 | https://fonts.google.com/specimen/Barlow |
+| three.js r160, with its OrbitControls and GLTFLoader add-ons | The 3D walk (kept in `docs/walk3d/vendor/three`) | MIT | https://threejs.org/ |
+| Blender 5.2 | Building the 3D walk's astronaut model (`tools/build_astronaut.py`); the model itself is ours | GPL-2.0-or-later (the program) | https://www.blender.org/ |
 | NumPy, SciPy, scikit-image, rasterio, Pillow | The Python build (`tools/`) | Open source (BSD-style licences; Pillow: MIT-CMU) | https://pypi.org/ |
 
 The logo in the page header and the browser-tab icon are drawn by `tools/make_logo.py` from our own terrain shading
