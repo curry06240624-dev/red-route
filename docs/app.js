@@ -360,6 +360,9 @@
     { id: "hazard", name: "Rough ground", file: "hazard.png", on: false, sw: "#a855f7" },
     { id: "returntime", name: "Walk-home time map", file: "returntime.png", on: false, sw: "linear-gradient(90deg,#22c55e,#eab308,#ef4444)" },
     { id: "hillshade", name: "Terrain shading", file: "hillshade.png", on: false, sw: "linear-gradient(90deg,#222,#ddd)" },
+    // Mars Odyssey THEMIS night-time infrared, 100 m pixels (NASA JPL Mars Trek). Context only: it is not used in the route.
+    { id: "themis", name: "Night heat (THEMIS infrared)", on: false, sw: "linear-gradient(90deg,#1a1a1a,#e5e5e5)",
+      note: "100 m pixels, from Mars Odyssey. At night, rock stays warmer (bright) and loose sand or dust cools faster (dark). Shades are relative, not temperatures. Context only: not used in the route." },
     { id: "traverse", name: "Perseverance's real path", on: true, sw: "repeating-linear-gradient(90deg,#38bdf8 0 4px,transparent 4px 7px)" },
     { id: "o2", name: "50-min backup-oxygen line", on: true, sw: "repeating-linear-gradient(90deg,#fbbf24 0 5px,transparent 5px 8px)" },
   ];
@@ -368,6 +371,9 @@
     for (const o of OVERLAYS) {
       if (o.file) S.overlays[o.id] = L.imageOverlay(`data/${o.file}`, m.overlay_bounds, { interactive: false, opacity: o.id === "hillshade" ? 0.85 : 1 });
     }
+    map.createPane("thermal"); map.getPane("thermal").style.zIndex = 250; map.getPane("thermal").style.pointerEvents = "none";   // above the background, below the other layers
+    S.overlays.themis = L.tileLayer(trekUrl("THEMIS_NightIR_ControlledMosaics_100m_v2_oct2018", "png"), { pane: "thermal", maxNativeZoom: 9, maxZoom: 19, opacity: 0.62,
+      attribution: `${credit} · THEMIS night infrared (NASA/JPL-Caltech/Arizona State University)` });
     if (traverse) S.overlays.traverse = L.geoJSON(traverse, { style: { color: "#38bdf8", weight: 2, opacity: 0.8, dashArray: "4 4" }, interactive: false });
     for (const o of OVERLAYS) if (o.on && S.overlays[o.id]) S.overlays[o.id].addTo(map);
   }
@@ -391,7 +397,7 @@
   function renderLayersPanel() {
     const box = $("#layersPanel");
     let html = '<button class="x" data-close="layersPanel" aria-label="Close">&times;</button><div class="lbl-lg">Map layers</div>';
-    for (const o of OVERLAYS) html += `<label class="lay"><input type="checkbox" data-ov="${o.id}" ${o.on ? "checked" : ""}> ${o.name}</label>`;
+    for (const o of OVERLAYS) html += `<label class="lay"><input type="checkbox" data-ov="${o.id}" ${o.on ? "checked" : ""}> ${o.name}</label>${o.note ? `<small class="lay-note">${o.note}</small>` : ""}`;
     html += '<div class="lbl-lg" style="margin-top:14px">Background</div><div class="bases">';
     for (const k of Object.keys(BASES)) html += `<button data-base="${k}" class="${k === baseKey ? "on" : ""}">${BASES[k].name}</button>`;
     html += "</div>";
@@ -1269,6 +1275,7 @@
       <h3>Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
+        <li>Night heat layer: Mars Odyssey THEMIS night-time infrared mosaic, 100 m pixels (NASA/JPL-Caltech/Arizona State University), tiles via NASA JPL Mars Trek. Context only: it is not used in the route.</li>
         <li>Perseverance waypoints, traverse and raw images: NASA/JPL-Caltech (Mastcam-Z: NASA/JPL-Caltech/ASU; SuperCam: NASA/JPL-Caltech/LANL/CNES/IRAP).</li>
         <li>Weather: the latest available Perseverance MEDA summaries (${medaLatest()}), NASA/JPL-Caltech/CAB. They are not live.</li>
         <li>Space weather: NASA DONKI notices, read live from NASA's CCMC service. If it does not answer, the app says NOT CHECKED and shows the date of its saved copy.</li>
