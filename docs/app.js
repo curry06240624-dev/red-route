@@ -173,7 +173,7 @@
     const m = S.m, t = m.totals, rc = m.rover_check, air = m.walkback.airlock_min || 0;
     const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}${stag("d", "how-checks")}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span>${c.bp ? `<span class="bp" data-src="derived">${esc(c.bp)}${stag("d", "bpHow")}</span>` : ""}</div>`).join("");
     $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
-      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}${stag("d", "how-route")}<br>CREW OF TWO · EV1 AND EV2 WALK TOGETHER</div>
+      <div class="mission">${t.dist_km.toFixed(2)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}${stag("d", "how-route")}<br>CREW OF TWO · EV1 AND EV2 WALK TOGETHER</div>
       ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} waypoint records.${stag("n", "tests")} <a href="#" id="proofLink">See the test</a></div>` : ""}
       <div class="stag-key">${stag("n", "how-data", 1)} measured by a NASA mission ${stag("d", "how-route", 1)} worked out from it ${stag("a", "how-numbers", 1)} a planning number we set. Click a tag for its source.</div>
       <hr class="r">`;
