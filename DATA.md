@@ -21,6 +21,14 @@ Galuszka, D. M., Redding, B. L., Smith, E. D., Shinaman, J. R., Cheng, Y., Otero
 Relative Navigation Flight Product Generation: Digital Terrain Model and Orthorectified Image Mosaics.* 51st Lunar and
 Planetary Science Conference.
 
+## Methods and reference values
+
+| What | From | Link | How Red Route uses it |
+|---|---|---|---|
+| Mars24 Sunclock algorithm and technical notes (after Allison and McEwen 2000, Planet. Space Sci. 48, 215-235) | NASA Goddard Institute for Space Studies | https://www.giss.nasa.gov/tools/mars24/help/algorithm.html and https://www.giss.nasa.gov/tools/mars24/help/notes.html | Mars local solar time, sunrise and sunset for the daylight block. Our code is tested against the page's worked example. |
+| Mars Fact Sheet | NASA NSSDC | https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html | The planet's shape, to turn the plan's latitude into the latitude Mars24 uses. |
+| Leap seconds (Bulletin C) | IERS, Paris Observatory | https://hpiers.obspm.fr/iers/bul/bulc/Leap_Second.dat | The difference between atomic time and UTC, needed by the Mars24 method. |
+
 ## Space agency partner data
 
 | Dataset | Provider and credit | Link | How Red Route uses it |

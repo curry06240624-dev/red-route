@@ -26,6 +26,7 @@ landing circle with slopes under 5°.
 - **Safety:** three get-home checks, each with its breaking point (how much slower the walk can be before it fails), a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, the 50-minute backup-oxygen line, and bad-day drill buttons (crewmate hurt, suit alarm, storm warning, running late) that answer from the crew's position.
 - **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
 - **Conditions:** NASA DONKI space-weather notices (read live from NASA's CCMC service; NOT CHECKED if it does not answer), the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live), and a quiet-day radiation dose for the walk from Curiosity RAD's published average at Gale Crater (for scale only).
+- **Daylight:** the walk day worked out with the NASA GISS Mars24 method: pick a start time in local solar time and see when the crew is back, when the Sun sets, and whether oxygen or daylight sets each leave-by time (flat horizon, no twilight margin).
 - **Context:** Perseverance's real traverse.
 
 ## How the route is found
@@ -65,12 +66,13 @@ All data, software and font credits are in DATA.md.
 ## Tests
 Automated tests with Node's built-in test runner (no packages to install; checked with Node 24). From the repo folder:
 ```bash
-node --test tests/
+node --test
 ```
-62 tests pass. They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
+70 tests pass (62 for the plan and the route engine, 8 for the Mars daylight method). They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
 T+2:11 and T+2:37), recompute it from the stored walk profile, check that no point of the walk is steeper than 15°,
 recount the rover tilt test from its stored pairs, and run the browser's route engine (`docs/router.js`) on the 4 m
 grid: the default walk comes out close to the stored 2 m plan, and with Tenby added both time checks fail (57 and 95 min).
+The daylight tests reproduce the worked example on the NASA GISS Mars24 page for 6 January 2000.
 
 ## Use of AI tools
 The code was written with help from an AI coding assistant (Claude by Anthropic). Claude also suggested the
