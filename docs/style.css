@@ -385,3 +385,9 @@ body.astro-on { overflow: hidden; }
 .stag-key .stag { margin-left: 0; margin-right: 4px; }
 .astro .stag { height: 20px; font-size: 11px; padding: 0 6px; }
 @media (max-width: 900px) { .stag.full span { display: none; } .stag-key .stag.full span { display: inline; } }
+/* phones: dialogs taller than the screen must scroll, and the drill card stays on screen */
+@media (max-width: 900px) {
+  .modal { overflow-y: auto; place-items: start center; }
+  .modal-body { margin: 8px auto; }
+  .drill-card, .drill-card.in-astro { position: fixed; left: 8px; right: 8px; top: auto; bottom: 10px; transform: none; margin: 0; max-height: 82vh !important; overflow-y: auto; }
+}
