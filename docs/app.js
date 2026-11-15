@@ -407,7 +407,11 @@
       note: "100 m pixels, from Mars Odyssey. At night, rock stays warmer (bright) and loose sand or dust cools faster (dark). Shades are relative, not temperatures. Zoom out to see it. Context only: not used in the route." },
     { id: "traverse", name: "Perseverance's real path", on: true, sw: "repeating-linear-gradient(90deg,#38bdf8 0 4px,transparent 4px 7px)" },
     { id: "o2", name: "50-min backup-oxygen line", on: true, sw: "repeating-linear-gradient(90deg,#fbbf24 0 5px,transparent 5px 8px)" },
-  ];
+    // The advice the Curiosity RAD team published from the storms it has measured: stay within 30 min of shelter (Löwe et al. 2025).
+    // Off by default; no check uses it.
+    { id: "storm", name: "Storm-shelter line: inside within 30 min", on: false, sw: "repeating-linear-gradient(90deg,#c084fc 0 5px,transparent 5px 8px)",
+      note: "Where the walk home takes 20 min, plus about 10 min to get inside. From the advice the team behind Curiosity's radiation detector published after the storms it has measured (Löwe et al. 2025): do not go more than 30 min from shelter. A research result, not a NASA flight rule, and none of the three checks uses it." },
+  ].filter((o) => o.id !== "storm" || window.StormReplay);
 
   function buildOverlays(m, traverse) {
     for (const o of OVERLAYS) {
@@ -431,7 +435,7 @@
       if (drill.line) rows.push(['<i style="height:0;border-top:3px dotted #f9a8d4;background:none"></i>', "Way home (drill)"]);
     }
     for (const o of OVERLAYS) {
-      const lay = S.overlays[o.id] || (o.id === "o2" ? zone.o2 : null);
+      const lay = S.overlays[o.id] || (o.id === "o2" || o.id === "storm" ? zone[o.id] : null);
       if (lay && map.hasLayer(lay) && o.id !== "hillshade") rows.push([`<i style="background:${o.sw}"></i>`, o.name]);
     }
     $("#legend").innerHTML = rows.map(([i, t]) => `<div>${i}<span>${t}</span></div>`).join("");
@@ -446,7 +450,7 @@
     html += "</div>";
     box.innerHTML = html;
     box.querySelectorAll("input[data-ov]").forEach((inp) => (inp.onchange = () => {
-      const id = inp.dataset.ov, lay = id === "o2" ? zone.o2 : S.overlays[id];
+      const id = inp.dataset.ov, lay = id === "o2" || id === "storm" ? zone[id] : S.overlays[id];
       OVERLAYS.find((o) => o.id === id).on = inp.checked;
       if (lay) inp.checked ? lay.addTo(map) : map.removeLayer(lay);
       bringRouteToFront(); renderLegend();
@@ -615,7 +619,7 @@
 
   /* ---------- EVA clock, crew marker and the "can still get home" zone ---------- */
   const eva = { T: 0, playing: false, raf: 0, marker: null, pulse: null };
-  const zone = { field: null, overlay: null, o2: null, canvas: document.createElement("canvas"), img: null, url: null, busy: false, pending: null, active: false };
+  const zone = { field: null, overlay: null, o2: null, storm: null, canvas: document.createElement("canvas"), img: null, url: null, busy: false, pending: null, active: false };
   const playBtn = $("#playBtn");
   playBtn.onclick = () => { closeGuide(); eva.playing ? pause() : play(); };
   function setPlayBtn(mode) {   // "play" | "pause" | "replay"
@@ -633,26 +637,33 @@
   }
 
   // Fixed line: everywhere within 50 min of walking from base camp (suit failure, 1 h backup oxygen).
-  function drawO2Line() {
+  // A dashed line where the walk home takes `limMin` minutes, read from the walk-home layer:
+  // the 50-min backup-oxygen line (amber) and the 30-min storm-shelter line (violet, off by default).
+  function drawLimitLine(key, limMin, rgb) {
     const g = S.m && S.m.grid, f = zone.field;
     if (!g || !f) return;
-    const lim = ((S.m.walkback.suit && S.m.walkback.suit.limit_min) || 50) * 10;
+    const lim = limMin * 10;
     const c = document.createElement("canvas"); c.width = g.w; c.height = g.h;
     const ctx = c.getContext("2d"), img = ctx.createImageData(g.w, g.h), px = img.data, w = g.w, n = g.w * g.h;
     for (let i = 0; i < n; i++) {
       if (f[i] > lim) continue;
       const edge = (i % w < w - 1 && f[i + 1] > lim) || (i % w > 0 && f[i - 1] > lim) || (i + w < n && f[i + w] > lim) || (i >= w && f[i - w] > lim);
       const x = i % w, y = (i / w) | 0;
-      if (edge && (x + y) % 6 < 4) { const o = i * 4; px[o] = 251; px[o + 1] = 191; px[o + 2] = 36; px[o + 3] = 240; }
+      if (edge && (x + y) % 6 < 4) { const o = i * 4; px[o] = rgb[0]; px[o + 1] = rgb[1]; px[o + 2] = rgb[2]; px[o + 3] = 240; }
     }
     ctx.putImageData(img, 0, 0);
     c.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
-      const on = OVERLAYS.find((o) => o.id === "o2").on;
-      if (zone.o2) { zone.o2.setUrl(url); } else { zone.o2 = L.imageOverlay(url, S.m.overlay_bounds, { interactive: false }); }
-      if (on && !map.hasLayer(zone.o2)) zone.o2.addTo(map);
+      const on = OVERLAYS.find((o) => o.id === key).on;
+      if (zone[key]) { zone[key].setUrl(url); } else { zone[key] = L.imageOverlay(url, S.m.overlay_bounds, { interactive: false }); }
+      if (on && !map.hasLayer(zone[key])) zone[key].addTo(map);
       bringRouteToFront(); renderLegend();
     }, "image/png");
+  }
+  function drawO2Line() {
+    drawLimitLine("o2", (S.m.walkback.suit && S.m.walkback.suit.limit_min) || 50, [251, 191, 36]);
+    // the published advice counts the time to be inside, so the line sits where the walk home is 30 min less the time to get inside
+    if (window.StormReplay) drawLimitLine("storm", window.StormReplay.published.shelter_min - GET_INSIDE_MIN, [192, 132, 252]);
   }
 
   function renderZone(T) {
@@ -917,7 +928,7 @@
         body += row("20 May 2024: alarm to strongest reading", `${warn} min`)
           + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the strongest reading began` : `not inside until ${fmtMin(spare)} after the strongest reading began`, spare >= 0 ? "INSIDE BEFORE THE PEAK" : "STILL OUTSIDE AT THE PEAK")
           + row(`Radiation until inside (${fmtMin(w.minutes)}${w.cut ? ", where our readings end" : ""})`, `about ${rnd(w.ugy)} µGy <small>quiet day: about ${rnd(w.quiet_ugy)} µGy</small>`);
-        note = `A replay, not a forecast: Curiosity's RAD readings for the solar storm of ${stormDay(SR)} in Gale Crater, from NASA's PDS archive (our reading). The alarm is the first reading above ${SR.alarmX} times the normal level, which is our choice. Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm itself arriving: this data holds no earlier warning. Measured on the rover's deck, not in a suit.`;
+        note = `A replay, not a forecast: Curiosity's RAD readings for the solar storm of ${stormDay(SR)} in Gale Crater, from NASA's PDS archive (our reading). The alarm is the first reading above ${SR.alarmX} times the normal level, which is our choice; the published 25 % rule of the RAD team (${SR.published.cite}), applied by us, picks the same reading. Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm itself arriving: this data holds no earlier warning. Measured on the rover's deck, not in a suit.`;
       } else {
         body += verdict(spare >= 0, spare >= 0 ? `inside with ${fmtMin(spare)} to spare` : `${fmtMin(spare)} short of shelter`);
         note = `${spare >= 0 ? "" : `With a ${warn}-min warning the crew would have to stay within ${warn - GET_INSIDE_MIN} min of walking from base. `}A what-if, not a forecast: real warning times depend on the storm.${SR ? ' "Real storm" replays the solar storm of 20 May 2024 from Curiosity\'s readings.' : ""}`;
@@ -1369,7 +1380,11 @@
       const SR = window.StormReplay, warn = Math.floor(SR.alarmToPeakMin), need = Math.ceil(wb.suit.worst.back - 1e-9) + GET_INSIDE_MIN, w = SR.walkHome(need);
       rows.push(["What would a real solar storm do to this walk?",
         `We replayed the storm of ${stormDay(SR)} from the readings of Curiosity's RAD. From the alarm to the strongest reading: ${warn} min. From the farthest point of this walk the crew needs ${need} min to be inside, so it is ${need > warn ? "still outside at the peak" : "inside before the peak"}, and takes about ${Math.round(w.ugy / 10) * 10} µGy on the way (the same minutes on a quiet day: about ${Math.round(w.quiet_ugy)}).`,
-        `Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm arriving: this data holds no earlier warning. Measured on the rover's deck in Gale Crater, not in a suit in Jezero. The alarm line, ${SR.alarmX} times normal, is our choice.`]);
+        `Readings are 8 to 16 min long, so ${warn} min could be ${SR.range_min[0]} to ${SR.range_min[1]}. The rise is the storm arriving: this data holds no earlier warning. Measured on the rover's deck in Gale Crater, not in a suit in Jezero. The alarm line, ${SR.alarmX} times normal, is our choice; the 25 % rule the RAD team published (<a href="${SR.published.doi}" target="_blank" rel="noopener">${SR.published.cite}</a>), applied by us to the same readings, picks the same reading.`]);
+      const P = SR.published, back = need - GET_INSIDE_MIN, ok = need <= P.shelter_min;
+      rows.push(["Does this walk follow the published storm-shelter advice?",
+        `${ok ? "Yes" : "No"}. From the storms it has measured, the team behind Curiosity's RAD advises not going more than ${P.shelter_min} min from shelter (<a href="${P.doi}" target="_blank" rel="noopener">${P.cite}</a>, ${P.journal}). From the farthest point of this walk the crew needs ${need} min to be inside: ${back} min to walk and ${GET_INSIDE_MIN} to get inside. The map layer "Storm-shelter line" shows where ${P.shelter_min} min ends.`,
+        `${ok ? "It holds for this walk." : "Failed, and we say so."} The advice is a research result from past storms at Gale Crater, not a NASA flight rule, and none of our three checks uses it: the suit rule allows ${wb.suit.limit_min} min of walking from base.`]);
     }
     rows.push(["Do the stored plan and the browser agree?",
       `The stored plan comes from a 2 m grid: +${wb.worst.margin_min} min, +${wb.bad.worst.margin_min} min and ${wb.suit.worst.back} min. The browser re-plans on a 4 m grid: +${ENGINE4.plan}, +${ENGINE4.bad} and ${ENGINE4.suit}.`,
@@ -1378,7 +1393,7 @@
       `No. Within ${sc.radius_m} m of it the ground reaches ${sc.slope_max}°. NASA's Artemis III EVA study draws a 100 m landing circle with slopes under 5°.`,
       "Failed, and we say so. Base camp was placed on top of the delta so that the loop fits the time rules."]);
     rows.push(["Are the numbers re-checked?",
-      "84 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method, the 1,000-walk simulation and the storm replay (node --test).",
+      "87 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method, the 1,000-walk simulation and the storm replay (node --test).",
       "They test the numbers and the route engine, not the screens. The screens were checked in a browser by an AI reviewer, on a desktop size and a phone size."]);
     return `<h3 id="how-checked">What we checked, and what failed</h3>
       <table class="chk-tbl"><tr><th>We asked</th><th>We checked</th><th>Limit, or what failed</th></tr>
@@ -1416,7 +1431,8 @@
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
       <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast. The storm drill counts the walk home plus about ${GET_INSIDE_MIN} min to get inside, the same allowance as the suit check.</p>
-      ${window.StormReplay ? `<p><b>Real storm.</b> The storm drill can also replay the solar storm of ${stormDay(window.StormReplay)} as Curiosity's Radiation Assessment Detector (RAD) measured it in Gale Crater. The readings are from NASA's Planetary Data System (<a href="${window.StormReplay.source}" target="_blank" rel="noopener">data set MSL-M-RAD-3-RDR-V1.0</a>, sol 4190, the plastic detector E, in micrograys an hour). The normal level before the storm was ${window.StormReplay.quiet} micrograys an hour. Our alarm is the first reading above ${window.StormReplay.alarmX} times that; it ended at ${window.StormReplay.alarm.atUtc} UTC. The strongest reading, ${Math.round(window.StormReplay.peak.e)} micrograys an hour (${Math.round(window.StormReplay.peak.timesQuiet)} times normal), began ${Math.floor(window.StormReplay.alarmToPeakMin)} min later. The dose on the way home holds each reading until the next one starts. What is ours, not NASA's: the alarm line and every sum. Limits: readings are 8 to 16 min long, so the ${Math.floor(window.StormReplay.alarmToPeakMin)} min could be ${window.StormReplay.range_min[0]} to ${window.StormReplay.range_min[1]}; the rise is the storm arriving, so this data holds no earlier warning; RAD sits on the rover's deck in Gale Crater, not in a suit in Jezero; and the detector gives a dose in plastic, not a dose to a person. In May 2024 the normal level (0.13 mGy a day) was lower than the 2012 to 2013 average used under Conditions (${RAD.gale_mgy_day} mGy a day).</p>` : ""}
+      ${window.StormReplay ? `<p><b>Real storm.</b> The storm drill can also replay the solar storm of ${stormDay(window.StormReplay)} as Curiosity's Radiation Assessment Detector (RAD) measured it in Gale Crater. The readings are from NASA's Planetary Data System (<a href="${window.StormReplay.source}" target="_blank" rel="noopener">data set MSL-M-RAD-3-RDR-V1.0</a>, sol 4190, the plastic detector E, in micrograys an hour). The normal level before the storm was ${window.StormReplay.quiet} micrograys an hour. Our alarm is the first reading above ${window.StormReplay.alarmX} times that; it ended at ${window.StormReplay.alarm.atUtc} UTC. The strongest reading, ${Math.round(window.StormReplay.peak.e)} micrograys an hour (${Math.round(window.StormReplay.peak.timesQuiet)} times normal), began ${Math.floor(window.StormReplay.alarmToPeakMin)} min later. The dose on the way home holds each reading until the next one starts. What is ours, not NASA's: the alarm line and every sum. Limits: readings are 8 to 16 min long, so the ${Math.floor(window.StormReplay.alarmToPeakMin)} min could be ${window.StormReplay.range_min[0]} to ${window.StormReplay.range_min[1]}; the rise is the storm arriving, so this data holds no earlier warning; RAD sits on the rover's deck in Gale Crater, not in a suit in Jezero; and the detector gives a dose in plastic, not a dose to a person. In May 2024 the normal level (0.13 mGy a day) was lower than the 2012 to 2013 average used under Conditions (${RAD.gale_mgy_day} mGy a day).</p>
+      <p><b>A published rule, for comparison.</b> The team behind RAD has published a warning rule (<a href="${window.StormReplay.published.doi}" target="_blank" rel="noopener">${window.StormReplay.published.cite}, ${window.StormReplay.published.journal}</a>): warn when detector E reads more than 25 % above its average of the five days before. Applied by us to the same archived readings (our file holds 3.5 of those days), it picks the same reading as our own line. The paper prints no clock times, so that match is our working, not the paper's. The paper counts 53 min from the start of that reading to the peak; we count ${Math.floor(window.StormReplay.alarmToPeakMin)} min from its end, when a crew could know. For the whole event the paper gives 1,731 micrograys above the normal level; counted the same way, our sum of the archived readings is within 3 % of that. The same paper advises not going more than ${window.StormReplay.published.shelter_min} min from shelter. This walk goes further, and "What we checked" says so; the optional map layer "Storm-shelter line" shows where ${window.StormReplay.published.shelter_min} min ends. It is a research result, not a NASA flight rule, and the three checks do not use it.</p>` : ""}
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} waypoint records inside our area (a few spots were logged more than once) our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}

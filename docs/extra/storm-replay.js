@@ -59,12 +59,24 @@
     return { minutes: m, cut: minutes > MAX_MIN, ugy: doseBetween(alarmT, alarmT + m * 60), quiet_ugy: QUIET * m / 60 };
   }
 
+  /* A published rule, for comparison. It is not ours and the app's alarm does not use it.
+     Löwe et al. (2025), "Nowcasting Solar Energetic Particle Events for Mars Missions", Space Weather 23, e2025SW004372,
+     https://doi.org/10.1029/2025SW004372 (the authors include the RAD team). Read in the published paper on 15 Nov 2026:
+       p. 5: an event "is triggered when the dose rate exceeds the background level by more than 25%" (detector E,
+             readings of about 15 minutes, background = the five days before);
+       p. 7: "an astronaut should not move more than 30 min away from a shelter";
+       Table 1: 1,730.55 micrograys above background for the event of 20 May 2024.
+     tests/storm-replay.test.mjs applies the 25 % rule to our readings (we have 3.5 of the five days): it picks the same
+     reading as our 1.5 times line. The paper prints no clock times, so that match is our own working. */
+  const PUBLISHED = { x: 1.25, shelter_min: 30, event_ugy: 1730.55, cite: "Löwe et al. 2025", journal: "Space Weather 23, e2025SW004372",
+    doi: "https://doi.org/10.1029/2025SW004372" };
+
   root.StormReplay = {
     day: DAY, readings, quiet: QUIET, alarmX: ALARM_X,
     alarm: { from: alarmR.utc, at: alarmT, atUtc: hhmm(alarmT), e: alarmR.e },
     peak: { from: peakR.utc, at: peakR.t, e: peakR.e, timesQuiet: peakR.e / QUIET },
     alarmToPeakMin, range_min: [28, 54], maxMin: MAX_MIN,
-    doseBetween, walkHome,
+    doseBetween, walkHome, published: PUBLISHED,
     source: "https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/",
   };
 })(typeof window !== "undefined" ? window : globalThis);

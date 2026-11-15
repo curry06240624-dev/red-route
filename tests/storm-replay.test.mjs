@@ -100,3 +100,36 @@ test("the add-on's sum equals the same sum on the full file, for every whole min
 test("first 24 h of the storm: about 1,750 micrograys in detector E (NASA's news release says 8,100; we do not compute with it)", () => {
   assert.equal(Math.round(dose(RISE, RISE + 86400)), 1752);
 });
+
+// A published rule, for comparison: Löwe et al. (2025), Space Weather 23, e2025SW004372, doi:10.1029/2025SW004372.
+// "A potential SEP event is triggered when the dose rate exceeds the background level by more than 25%" (p. 5; detector E,
+// readings of about 15 minutes, background = the five days before). Our file holds the last 3.5 of those days.
+test("the published 25 % rule, applied to our readings, picks the same reading as our 1.5 times line", () => {
+  const before = csv.filter((r) => r.t < RISE);
+  const mean = before.reduce((s, r) => s + r.e, 0) / before.length;
+  assert.equal(mean.toFixed(3), "5.544");
+  assert.equal(SR.published.x, 1.25);
+  const i = csv.findIndex((r) => r.e > SR.published.x * mean);
+  assert.equal(csv[i].utc, "2024-05-20T05:21:50Z");
+  assert.equal(csv[i].utc, `2024-05-20T${SR.alarm.from}Z`);
+  assert.ok(csv[i + 1].e > SR.published.x * mean, "the next reading confirms it");
+  assert.equal(before.filter((r) => r.e > SR.published.x * mean).length, 0);
+});
+
+test("event dose above the normal level, counted the paper's way (41 h 55 min), is within 3 % of the paper's 1,730.55 micrograys", () => {
+  const span = (41 * 60 + 55) * 60;
+  const above = (quiet) => dose(RISE, RISE + span) - quiet * span / 3600;
+  assert.equal(SR.published.event_ugy, 1730.55);
+  for (const quiet of [SR.quiet, 6.85]) {   // our normal level, and the paper's own (164.35 micrograys a day)
+    const off = Math.abs(above(quiet) - SR.published.event_ugy) / SR.published.event_ugy;
+    assert.ok(off < 0.03, `normal level ${quiet}: ${above(quiet).toFixed(0)} micrograys, off by ${(off * 100).toFixed(1)} %`);
+  }
+});
+
+test("the published shelter advice is 30 min; the default walk's farthest point needs 53 min to be inside", () => {
+  assert.equal(SR.published.shelter_min, 30);
+  const mission = JSON.parse(read("../docs/data/mission.json"));
+  const need = Math.ceil(mission.walkback.suit.worst.back - 1e-9) + 10;   // walk home, rounded up, plus 10 min to get inside
+  assert.equal(need, 53);
+  assert.ok(need > SR.published.shelter_min);
+});
