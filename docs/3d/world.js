@@ -11,9 +11,9 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 
 export const SKY_HORIZON = new THREE.Color(0xd8a877);
 export const SKY_ZENITH = new THREE.Color(0x8f6748);
-// The sun's place is fixed for the picture (late afternoon, low in the west-north-west, about 25 degrees up);
-// it is not worked out from a date.
-export const SUN_DIR = new THREE.Vector3(-0.80, 0.42, -0.43).normalize();
+// The sun's place is fixed for the picture (late afternoon, low in the west-north-west, about 14 degrees up, over the
+// crater rim); it is not worked out from a date. assets/jezero_sun_shadow.png was made for exactly this direction.
+export const SUN_DIR = new THREE.Vector3(-0.86, 0.245, -0.45).normalize();
 
 /* ---------- ground: grid <-> world. x = metres east of the grid's west edge, z = metres south of its north edge, y = metres above Y0 ---------- */
 export class Ground {
@@ -151,12 +151,13 @@ export function buildTerrain(scene, G, maxSlope, step) {
   const mat = new THREE.MeshLambertMaterial({ map: makeColourTexture(G), bumpMap: bump, bumpScale: 1.7 });
   const uni = { uDetail: { value: detail }, uDetailRep: { value: new THREE.Vector2(G.sizeX / 5.0, G.sizeZ / 5.0) },
     uNoGo: { value: makeNoGoTexture(G, maxSlope) }, uTint: { value: 1 }, uBlot: { value: 1 },
-    uHi: { value: null }, uHiRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uHiOn: { value: 0 } };
+    uHi: { value: null }, uHiRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uHiOn: { value: 0 },
+    uShadow: { value: null }, uShadowOn: { value: 0 }, uNrm: { value: null }, uNrmOn: { value: 0 } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
       .replace("#include <fog_vertex>", "#include <fog_vertex>\nvCamDist = length(mvPosition.xyz);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uNoGo;\nuniform sampler2D uHi;\nuniform vec4 uHiRect;\nuniform float uHiOn;\nuniform vec2 uDetailRep;\nuniform float uTint;\nuniform float uBlot;\nvarying float vCamDist;")
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uNoGo;\nuniform sampler2D uHi;\nuniform vec4 uHiRect;\nuniform float uHiOn;\nuniform sampler2D uShadow;\nuniform sampler2D uNrm;\nuniform float uShadowOn;\nuniform float uNrmOn;\nuniform vec2 uDetailRep;\nuniform float uTint;\nuniform float uBlot;\nvarying float vCamDist;")
       .replace("#include <map_fragment>", `#include <map_fragment>
         {
           vec2 hq = (vMapUv - uHiRect.xy) / (uHiRect.zw - uHiRect.xy);   // the sharper picture along the route, faded in at its edges
@@ -171,6 +172,18 @@ export function buildTerrain(scene, G, maxSlope, step) {
           diffuseColor.rgb *= grain * blot;
           vec4 ng = texture2D(uNoGo, vMapUv);
           diffuseColor.rgb = mix(diffuseColor.rgb, ng.rgb, ng.a * uTint);
+          float lit = mix(1.0, texture2D(uShadow, vMapUv).r, uShadowOn);          // where the terrain hides the low sun: only sky light
+          diffuseColor.rgb *= mix(vec3(0.34, 0.38, 0.50), vec3(1.0), lit);
+        }`);
+    // along the route the light uses the surface direction of the 1 m elevation model instead of the 4 m grid
+    sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+        {
+          vec2 nq = (vMapUv - uHiRect.xy) / (uHiRect.zw - uHiRect.xy);
+          vec2 ne = min(nq, 1.0 - nq);
+          float nw = uNrmOn * smoothstep(0.0, 0.035, min(ne.x, ne.y));
+          vec3 nWorld = texture2D(uNrm, clamp(nq, 0.0, 1.0)).xyz * 2.0 - 1.0;
+          vec3 nView = normalize((viewMatrix * vec4(nWorld, 0.0)).xyz);
+          normal = normalize(normal + nw * (nView - nonPerturbedNormal));
         }`);
   };
   mat.customProgramCacheKey = () => "rr-terrain";
@@ -214,7 +227,7 @@ export function buildTerrain(scene, G, maxSlope, step) {
   scene.add(group);
   // beyond the mapped ground: a plain floor in haze, so the edge of the data is not a hole
   const far = new THREE.Mesh(new THREE.CircleGeometry(40000, 48), new THREE.MeshLambertMaterial({ color: 0x9a6a48 }));
-  far.rotation.x = -Math.PI / 2; far.position.set(G.sizeX / 2, -6, G.sizeZ / 2); far.matrixAutoUpdate = false; far.updateMatrix();
+  far.rotation.x = -Math.PI / 2; far.position.set(G.sizeX / 2, -170, G.sizeZ / 2); far.matrixAutoUpdate = false; far.updateMatrix();
   scene.add(far);
   // the real picture of the ground, when it has loaded
   const loadOrtho = (url, width) => new Promise((res, rej) => {
@@ -235,7 +248,54 @@ export function buildTerrain(scene, G, maxSlope, step) {
     img.onerror = () => rej(new Error("corridor picture did not load"));
     img.src = url;
   });
-  return { group, mat, loadOrtho, loadHi, setTint: (on) => { uni.uTint.value = on ? 1 : 0; } };
+  // the sun-shadow layer (whole grid) and the 1 m surface directions (the box along the route)
+  const loadLayers = (shadowUrl, reliefUrl) => {
+    const L = new THREE.TextureLoader();
+    L.load(shadowUrl, (t) => { t.colorSpace = THREE.NoColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; uni.uShadow.value = t; uni.uShadowOn.value = 1; });
+    L.load(reliefUrl, (t) => { t.colorSpace = THREE.NoColorSpace; t.anisotropy = 4; uni.uNrm.value = t; uni.uNrmOn.value = 1; });
+  };
+  return { group, mat, loadOrtho, loadHi, loadLayers, setTint: (on) => { uni.uTint.value = on ? 1 : 0; } };
+}
+
+/* ---------- the ground far around the walk: crater floor, delta and the crater rim ----------
+   Shape: the CTX elevation model of Jezero (USGS Mars 2020 landing products, 20 m), on an 80 m grid.
+   Picture: the CTX mosaic (NASA/JPL/MSSS, tiles from NASA Mars Trek), with the same colour ramp as the near ground.
+   The part under the walk's own HiRISE grid is left out. meta = { w, h, lonW, lonE, latS, latN, z_scale, z_offset, bias }. */
+export function buildFar(scene, G, meta, dem, img, texWidth) {
+  const w = meta.w, h = meta.h, xs = new Float64Array(w), zs = new Float64Array(h);
+  for (let i = 0; i < w; i++) xs[i] = G.xOf(meta.lonW + ((i + 0.5) / w) * (meta.lonE - meta.lonW));
+  for (let j = 0; j < h; j++) zs[j] = G.zOf(meta.latN - ((j + 0.5) / h) * (meta.latN - meta.latS));
+  const drop = meta.bias + 7;   // CTX sits a little higher than HiRISE; keep the far ground just under the near ground where they overlap
+  const hAt = (i, j) => dem[Math.max(0, Math.min(h - 1, j)) * w + Math.max(0, Math.min(w - 1, i))] * meta.z_scale + meta.z_offset - G.Y0 - drop;
+  const pos = new Float32Array(w * h * 3), nor = new Float32Array(w * h * 3), uv = new Float32Array(w * h * 2);
+  for (let j = 0, k = 0, ku = 0; j < h; j++) for (let i = 0; i < w; i++, k += 3, ku += 2) {
+    pos[k] = xs[i]; pos[k + 1] = hAt(i, j); pos[k + 2] = zs[j];
+    const il = Math.max(0, i - 1), ir = Math.min(w - 1, i + 1), ju = Math.max(0, j - 1), jd = Math.min(h - 1, j + 1);
+    const dx = (hAt(ir, j) - hAt(il, j)) / (xs[ir] - xs[il]), dz = (hAt(i, jd) - hAt(i, ju)) / (zs[jd] - zs[ju]), inv = 1 / Math.hypot(dx, 1, dz);
+    nor[k] = -dx * inv; nor[k + 1] = inv; nor[k + 2] = -dz * inv;
+    uv[ku] = (i + 0.5) / w; uv[ku + 1] = 1 - (j + 0.5) / h;
+  }
+  const idx = [], m = 130;
+  for (let j = 0; j < h - 1; j++) for (let i = 0; i < w - 1; i++) {
+    if (xs[i] > m && xs[i + 1] < G.sizeX - m && zs[j] > m && zs[j + 1] < G.sizeZ - m) continue;   // the near ground covers this
+    const a = j * w + i, b = a + 1, c = a + w, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tintOrtho(img, texWidth) }));
+  mesh.matrixAutoUpdate = false; mesh.frustumCulled = false;
+  scene.add(mesh);
+  const heightAt = (x, z) => {   // height above Y0 from the far grid (used to see if the rim hides the sun)
+    const fi = ((x - xs[0]) / (xs[w - 1] - xs[0])) * (w - 1), fj = ((z - zs[0]) / (zs[h - 1] - zs[0])) * (h - 1);
+    if (fi < 0 || fj < 0 || fi > w - 1 || fj > h - 1) return -1e9;
+    const i = Math.min(w - 2, Math.floor(fi)), j = Math.min(h - 2, Math.floor(fj)), u = fi - i, v = fj - j;
+    return (hAt(i, j) * (1 - u) + hAt(i + 1, j) * u) * (1 - v) + (hAt(i, j + 1) * (1 - u) + hAt(i + 1, j + 1) * u) * v;
+  };
+  return { mesh, heightAt };
 }
 
 /* ---------- sky dome with the sun ---------- */
@@ -275,9 +335,9 @@ export function buildSky(scene) {
 }
 
 export function buildLights(scene) {
-  const hemi = new THREE.HemisphereLight(0xf0d2b0, 0x6a4937, 1.25);
+  const hemi = new THREE.HemisphereLight(0xeccfb2, 0x66483a, 1.4);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffdfba, 4.4);
+  const sun = new THREE.DirectionalLight(0xffd2a0, 7.0);
   sun.position.copy(SUN_DIR).multiplyScalar(100);
   scene.add(sun); scene.add(sun.target);
   return { hemi, sun };

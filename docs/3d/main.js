@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=9";
-import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=9";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=9";
-import { makeFx } from "./fx.js?v=9";
-import { Rocks, Footprints, Dust } from "./props.js?v=9";
-import { Sound } from "./sound.js?v=9";
+import * as P from "./plan.js?v=10";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=10";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=10";
+import { makeFx } from "./fx.js?v=10";
+import { Rocks, Footprints, Dust } from "./props.js?v=10";
+import { Sound } from "./sound.js?v=10";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -38,6 +38,9 @@ const sound = new Sound();
 const HI_BOX = { c0: 373, c1: 577, r0: 129, r1: 444 };   // grid cells covered by the sharper picture along the route
 const labels = [];
 
+// heavy one-off work (a picture arrived, the plan was re-made): do not judge the device's speed for a while
+const busy = (ms = 5000) => { S.quietUntil = Math.max(S.quietUntil || 0, performance.now() + ms); S.slow = 0; };
+
 /* ---------- loading ---------- */
 function prog(pct, msg) { $("#lBar").style.width = `${pct}%`; if (msg) $("#lMsg").textContent = msg; }
 const getData = (f) => fetch(`../data/${f}`, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(`${f}: ${r.status}`); return r; });
@@ -62,7 +65,7 @@ async function boot() {
   prog(100, "Ready");
   $("#lStart").hidden = false;
   loadAstronautModel("assets/astronaut.glb?v=4").then((model) => {
-    ev1.useModel(model); ev2.useModel(model);
+    ev1.useModel(model); ev2.useModel(model); busy();
     $("#aiLabel").hidden = false; S.aiModel = true;
   }).catch((e) => { console.warn("The AI astronaut model did not load; using the code-made figure.", e); });
   const auto = Q.get("auto");
@@ -77,10 +80,10 @@ function initScene() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.5 : 1.75));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.00033);
-  camera = new THREE.PerspectiveCamera(62, 1, 0.45, 12000);
+  scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.00021);
+  camera = new THREE.PerspectiveCamera(62, 1, 0.45, 32000);
   camera.rotation.order = "YXZ";
   sky = buildSky(scene);
   lights = buildLights(scene);
@@ -89,18 +92,24 @@ function initScene() {
   sh.camera.left = -26; sh.camera.right = 26; sh.camera.top = 26; sh.camera.bottom = -26; sh.bias = -0.0006; sh.normalBias = 0.06;
   terrain = buildTerrain(scene, G, S.m.assumptions.max_slope_deg, 1);
   terrain.loadOrtho("assets/jezero_hirise_ortho.jpg?v=1", Math.min(TOUCH ? 2048 : 4096, renderer.capabilities.maxTextureSize))
-    .then(() => { S.ortho = true; }).catch((e) => console.warn("The HiRISE ground picture did not load; using colours drawn by code.", e));
+    .then(() => { S.ortho = true; busy(); }).catch((e) => console.warn("The HiRISE ground picture did not load; using colours drawn by code.", e));
   routeLine = new RouteLine(scene, G);
   routeLine.set(S.route);
   markers = new StopMarkers(scene, G);
   const b = P.stopById(S.m, "base");
   buildHabitat(scene, G, b.lat, b.lon);
   ev1 = new Astronaut(scene, 0xff6a3d); ev2 = new Astronaut(scene, 0x38bdf8);
-  rocks = new Rocks(scene, G); prints = new Footprints(scene, G); dust = new Dust(scene);
+  rocks = new Rocks(scene, G, TOUCH); prints = new Footprints(scene, G); dust = new Dust(scene);
   clearPath();
   terrain.loadHi("assets/jezero_hirise_corridor.jpg?v=1", [HI_BOX.c0 / G.W, 1 - HI_BOX.r1 / G.H, HI_BOX.c1 / G.W, 1 - HI_BOX.r0 / G.H],
-    TOUCH ? 1280 : 2560, renderer.capabilities.maxTextureSize).then(() => { S.hi = true; })
+    TOUCH ? 1280 : 2560, renderer.capabilities.maxTextureSize).then(() => { S.hi = true; busy(); })
     .catch((e) => console.warn("The sharper ground picture along the route did not load.", e));
+  terrain.loadLayers("assets/jezero_sun_shadow.png?v=1", "assets/jezero_relief_1m.jpg?v=1");
+  // the far ground and the crater rim (CTX), drawn around the walk's own HiRISE ground
+  const image = (url) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error(url)); im.src = url; });
+  Promise.all([fetch("assets/jezero_far.json?v=1").then((r) => r.json()), fetch("assets/jezero_far_dem.i16?v=1").then((r) => r.arrayBuffer()), image("assets/jezero_ctx_far.jpg?v=1")])
+    .then(([meta, buf, img]) => { S.far = buildFar(scene, G, meta, new Int16Array(buf), img, TOUCH ? 1024 : 2048); busy(); })
+    .catch((e) => console.warn("The far ground did not load; the horizon stays flat.", e));
   refreshStops();
   // the film look needs a high-range drawing surface; without one the picture is drawn directly
   const hdrOk = renderer.capabilities.isWebGL2 && (renderer.extensions.has("EXT_color_buffer_float") || renderer.extensions.has("EXT_color_buffer_half_float"));
@@ -205,7 +214,7 @@ function setTenby(on) {
     stops: S.base.stops.map((s) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, dwell_min: s.dwell_min })) });
 }
 function planChanged() {
-  setLegEnds(); routeLine.set(S.route); refreshStops(); closeDrill(); buildMini(); clearPath();
+  setLegEnds(); routeLine.set(S.route); refreshStops(); closeDrill(); buildMini(); clearPath(); busy();
   const wasPlan = S.mode === "plan";
   resetToStart(); if (wasPlan) S.mode = "plan";
   renderMenu(); S.hudKey = "";
@@ -220,15 +229,16 @@ function resetToStart() {
   S.heading = P.bearing([b.lat, b.lon], ahead); S.yaw = S.heading; S.lookOff = 0; S.pitch = -4;
 }
 function start(mode, flyIn = false) {
-  S.started = true;
+  S.started = true; busy(9000);
   sound.start();
   $("#loader").classList.add("done"); document.body.classList.remove("loading");
   $("#hud").hidden = false;
   if (TOUCH) document.body.classList.add("touch");
   if (Q.get("view") === "third") setView("third");
   if (Q.get("speed")) S.speed = +Q.get("speed") || 30;
-  if (mode === "plan") { S.mode = "plan"; S.playing = true; toast("Following the plan. Walk any time to take over.", 4500); }
-  else { S.mode = "free"; toast(TOUCH ? "Use the stick to walk. Drag to look around." : "W A S D to walk. Drag the mouse to look around.", 6000); }
+  const hint = mode === "plan" ? "Following the plan. Walk any time to take over." : TOUCH ? "Use the stick to walk. Drag to look around." : "W A S D to walk. Drag the mouse to look around.";
+  if (mode === "plan") { S.mode = "plan"; S.playing = true; } else S.mode = "free";
+  setTimeout(() => toast(hint, 5500), flyIn ? 6800 : 0);   // after the fly-in, so it does not sit on the title
   if (Q.get("t") != null) jump(parseFloat(Q.get("t")), Q.get("play") === "1");
   if (Q.get("menu") === "1") toggleMenu(true);
   if (flyIn || Q.get("intro") === "1") { startIntro(); S.introFrom = camFrom.clone(); }
@@ -394,7 +404,7 @@ function update(dt) {
       if (dn < ARRIVE_M) {
         if (F.leg + 1 === last) { F.home = true; F.homeT = S.T; F.hereIdx = -1; }
         else { F.hereIdx = F.leg + 1; F.leg += 1; }
-        sound.alert("arrive");
+        sound.alert("arrive"); stopTitle(F.home ? last : F.hereIdx);
         S.hudKey = "";
       } else if (F.hereIdx >= 0) {
         const h = P.stopById(m, m.order[F.hereIdx]);
@@ -437,7 +447,8 @@ const CINE = [   // the cinema camera's shots, one after the other
 function startIntro() {
   const h = S.heading * DEG, y = G.height(S.pos.x, S.pos.z);
   camFrom.set(S.pos.x - Math.sin(h) * 330 + Math.cos(h) * 150, y + 210, S.pos.z + Math.cos(h) * 330 + Math.sin(h) * 150);
-  S.intro = { t: 0, dur: 6 };
+  S.intro = { t: 0, dur: 6.5 };
+  showTitle("JEZERO CRATER · MARS", `The planned Marswalk · ${S.m.totals.dist_km.toFixed(2)} km · home by T+${P.hm(S.m.walkback.budget_min)}`, 5600);
   document.body.classList.add("intro");
 }
 function endIntro() { if (!S.intro) return; S.intro = null; document.body.classList.remove("intro"); }
@@ -544,7 +555,9 @@ function renderHud() {
   if (v.cls !== S.lastCls) { S.lastCls = v.cls; S.badBeeps = 0; if (v.cls === "warn") sound.alert("warn"); }
   if (v.cls === "bad" && (S.badBeeps || 0) < 4 && n.src !== "wait") { const before = sound.lastAlarm; sound.alert("bad"); if (sound.lastAlarm !== before) S.badBeeps = (S.badBeeps || 0) + 1; }
   const hereId = n.here ? n.here.id : "";
-  if (S.mode === "plan" && hereId && hereId !== S.lastHere && S.playing) sound.alert("arrive");
+  if (S.mode === "plan" && hereId && hereId !== S.lastHere && S.playing) { sound.alert("arrive"); stopTitle(n.hereIdx); }
+  if (S.mode === "plan" && n.after && !S.lastAfter && S.playing) stopTitle(m.order.length - 1);
+  S.lastAfter = n.after;
   S.lastHere = hereId;
   put("hHurt", n.after || !known ? "" : `If EV2 is hurt and EV1 helps: <b class="${n.mBad < 0 ? "bad" : ""}">${P.fmtMin(n.mBad)} ${n.mBad < 0 ? "short" : "to spare"}</b>`);
   // walk home against the backup oxygen
@@ -702,6 +715,33 @@ function initHud() {
   buildMini(); renderMenu(); syncButtons();
 }
 
+// is the sun in the picture, and is ground (near or far) in front of it? Feeds the lens flare.
+function sunOnLens(dt) {
+  const c = camera.position, u = fx.grade.uniforms;
+  _v.copy(c).addScaledVector(SUN_DIR, 20000).project(camera);
+  let vis = _v.z < 1 && Math.abs(_v.x) < 1.2 && Math.abs(_v.y) < 1.2 ? 1 : 0;
+  for (let d = 12; vis && d < 16000; d *= 1.2) {
+    const x = c.x + SUN_DIR.x * d, z = c.z + SUN_DIR.z * d, y = c.y + SUN_DIR.y * d;
+    const gh = G.inside(x, z, 0) ? G.height(x, z) : S.far ? S.far.heightAt(x, z) : -1e9;
+    if (gh > y) vis = 0;
+  }
+  S.sunVis = (S.sunVis || 0) + (vis - (S.sunVis || 0)) * Math.min(1, dt * 7);
+  u.uSun.value.set(_v.x * 0.5 + 0.5, _v.y * 0.5 + 0.5); u.uSunVis.value = S.sunVis; u.uAspect.value = camera.aspect;
+}
+
+/* ---------- title cards: a few words on the picture at the start and when the crew reaches a stop ---------- */
+let titleTimer = 0;
+function showTitle(main, sub, ms = 3800) {
+  const t = $("#title"); t.querySelector("b").textContent = main; t.querySelector("span").textContent = sub || "";
+  t.classList.add("on"); clearTimeout(titleTimer); titleTimer = setTimeout(() => t.classList.remove("on"), ms);
+}
+function stopTitle(idx) {
+  const m = S.m, tl = m.timeline || [], s = P.stopById(m, m.order[idx]);
+  if (!s || !tl[idx]) return;
+  if (idx === m.order.length - 1) showTitle("BASE CAMP", `Home · the crew had to be back by T+${P.hm(m.walkback.budget_min)}`, 4500);
+  else showTitle(P.shortName(s).toUpperCase(), `Leave by T+${P.hm(P.leaveBy(tl[idx]))}`);
+}
+
 /* ---------- frame loop ---------- */
 let lastT = 0, hudT = 0, frames = 0, fpsT = 0;
 function frame(now) {
@@ -709,14 +749,15 @@ function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000 || 0.016);
   lastT = now;
   update(dt);
-  if (fx && !S.lite) fx.render(dt); else renderer.render(scene, camera);
+  if (fx && !S.lite) { sunOnLens(dt); fx.render(dt); } else renderer.render(scene, camera);
   placeLabels();
   if (now - hudT > 90 || S.hudKey === "") { hudT = now; S.hudKey = "ok"; if (S.started) renderHud(); }
   frames++;
   if (now - fpsT > 1000) {
     S.fps = Math.round((frames * 1000) / (now - fpsT)); frames = 0; fpsT = now;
     // slow device: after three slow seconds in a row, draw fewer pixels and drop the shadows
-    if (S.started && document.visibilityState === "visible") {
+    // (not while pictures are still being prepared: that work, not the device, makes those seconds slow)
+    if (S.started && document.visibilityState === "visible" && now > (S.quietUntil || 0)) {
       S.slow = S.fps < 24 ? (S.slow || 0) + 1 : 0;
       if (S.slow >= 3 && !S.lite) {
         if (fx && !S.noFx) { S.noFx = true; fx = null; S.slow = 0; }   // first drop the film look, then (if still slow) the shadows and the sharpness
@@ -728,6 +769,6 @@ function frame(now) {
 }
 
 // hooks for tests: read the helmet numbers, jump to a moment, change the view (nothing here changes the plan)
-window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ hi: !!S.hi, rocks: rocks ? rocks.counts : null, prints: prints ? prints.used : 0, fx: !!fx, view: S.view, intro: !!S.intro, ortho: !!S.ortho, fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
+window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ far: !!S.far, sunVis: +(S.sunVis || 0).toFixed(2), hi: !!S.hi, rocks: rocks ? rocks.counts : null, prints: prints ? prints.used : 0, fx: !!fx, view: S.view, intro: !!S.intro, ortho: !!S.ortho, fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
 
 boot().catch((e) => { console.error(e); $("#lMsg").textContent = "Could not load the 3D walk. Please reload the page."; });

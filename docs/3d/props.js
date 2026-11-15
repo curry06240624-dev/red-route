@@ -5,27 +5,43 @@
    Nothing here changes a number; the walk maths never looks at these.
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 const h3 = (x, y, k) => { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(k, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
 
+// a lumpy, slightly flat rock with a darker underside; corners are shared so the light falls smoothly over it
 function rockGeometry(detail, seed) {
-  const g = new THREE.IcosahedronGeometry(1, detail), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {   // push each corner in or out; corners shared by faces get the same push
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const f = 0.72 + 0.56 * h3(Math.round(x * 97), Math.round(y * 89) + seed, Math.round(z * 83));
-    p.setXYZ(i, x * f, y * f * 0.66, z * f);
+  let g = new THREE.IcosahedronGeometry(1, detail);
+  g.deleteAttribute("uv"); g.deleteAttribute("normal");
+  g = mergeVertices(g, 1e-4);
+  const p = g.attributes.position, col = new Float32Array(p.count * 3), bumps = [];
+  for (let k = 0; k < 7; k++) {
+    const u = h3(seed, k, 1) * 2 - 1, a = h3(seed, k, 2) * 6.283, r = Math.sqrt(1 - u * u);
+    bumps.push([r * Math.cos(a), u, r * Math.sin(a), (h3(seed, k, 3) - 0.35) * 0.55]);
   }
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    let f = 1 + (h3(Math.round(x * 97), Math.round(y * 89) + seed, Math.round(z * 83)) - 0.5) * (detail > 1 ? 0.12 : 0.2);
+    for (const [bx, by, bz, amp] of bumps) { const d = Math.max(0, x * bx + y * by + z * bz); f += amp * d * d * d; }
+    let yy = y * f * 0.68; if (yy < -0.22) yy = -0.22 + (yy + 0.22) * 0.25;   // sits flat on the ground
+    p.setXYZ(i, x * f, yy, z * f);
+    const shade = (0.6 + 0.4 * Math.min(1, Math.max(0, (yy + 0.25) / 0.6))) * (0.9 + 0.2 * h3(i, seed, 9));
+    col[i * 3] = shade; col[i * 3 + 1] = shade; col[i * 3 + 2] = shade;
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
   g.computeVertexNormals();
   return g;
 }
 
 export class Rocks {
-  constructor(scene, G) {
+  constructor(scene, G, lowDetail = false) {
     this.G = G; this.cx = 1e9; this.cz = 1e9; this.routeCells = new Map(); this.keepOut = [];
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
-    this.small = new THREE.InstancedMesh(rockGeometry(0, 3), mat, 7000);
-    this.big = new THREE.InstancedMesh(rockGeometry(1, 11), mat, 1500);
-    for (const m of [this.small, this.big]) { m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.count = 0; scene.add(m); }
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+    // three sizes of rock, each with its own shape and level of detail: [mesh, smallest size in metres]
+    this.small = new THREE.InstancedMesh(rockGeometry(0, 3), mat, 4500);
+    this.mid = new THREE.InstancedMesh(rockGeometry(1, 11), mat, 5000);
+    this.big = new THREE.InstancedMesh(rockGeometry(lowDetail ? 1 : 2, 29), mat, 1000);
+    for (const m of [this.small, this.mid, this.big]) { m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.count = 0; scene.add(m); }
     this.m4 = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.e = new THREE.Euler(); this.v = new THREE.Vector3(); this.s = new THREE.Vector3(); this.col = new THREE.Color();
   }
   // the planned path and the stops stay clear of rocks
@@ -55,8 +71,7 @@ export class Rocks {
     const G = this.G, g = G.g, R = 165, NEAR = 30;
     const c0 = Math.max(1, Math.floor((px - R) / g.gx)), c1 = Math.min(G.W - 2, Math.floor((px + R) / g.gx));
     const r0 = Math.max(1, Math.floor((pz - R) / g.gy)), r1 = Math.min(G.H - 2, Math.floor((pz + R) / g.gy));
-    let ns = 0, nb = 0;
-    const maxS = this.small.instanceMatrix.count, maxB = this.big.instanceMatrix.count;
+    const cls = [this.small, this.mid, this.big], cnt = [0, 0, 0];
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
       const xm = (c + 0.5) * g.gx, zm = (r + 0.5) * g.gy, d2 = (xm - px) ** 2 + (zm - pz) ** 2;
       if (d2 > R * R) continue;
@@ -68,8 +83,8 @@ export class Rocks {
         let size = peb ? 0.025 + 0.06 * u : 0.07 + Math.pow(u, 3.0) * (0.34 + rough * 2.6);
         size = Math.min(size, 1.25);
         if (this.nearPath(x, z, i, 0.75 + size)) continue;
-        const big = size > 0.42;
-        if (big ? nb >= maxB : ns >= maxS) continue;
+        const ci = size < 0.11 ? 0 : size < 0.5 ? 1 : 2, mesh = cls[ci];
+        if (cnt[ci] >= mesh.instanceMatrix.count) continue;
         const w = 0.8 + 0.5 * h3(c, r, 100 + k);
         this.e.set(h3(c, r, 130 + k) * 0.7 - 0.35, h3(c, r, 160 + k) * 6.283, h3(c, r, 190 + k) * 0.7 - 0.35);
         this.q.setFromEuler(this.e);
@@ -77,13 +92,13 @@ export class Rocks {
         this.s.set(size * w, size * (0.55 + 0.4 * h3(c, r, 220 + k)), size * (1.6 - w));
         this.m4.compose(this.v, this.q, this.s);
         const t = h3(c, r, 250 + k);
-        this.col.setRGB(0.36 + 0.36 * t, 0.235 + 0.25 * t, 0.165 + 0.19 * t, THREE.SRGBColorSpace);
-        const mesh = big ? this.big : this.small, idx = big ? nb++ : ns++;
+        this.col.setRGB(0.46 + 0.34 * t, 0.30 + 0.24 * t, 0.21 + 0.18 * t, THREE.SRGBColorSpace);
+        const idx = cnt[ci]++;
         mesh.setMatrixAt(idx, this.m4); mesh.setColorAt(idx, this.col);
       }
     }
-    for (const [m, n] of [[this.small, ns], [this.big, nb]]) { m.count = n; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
-    this.counts = [ns, nb];
+    cls.forEach((m, i) => { m.count = cnt[i]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+    this.counts = cnt;
   }
 }
 
