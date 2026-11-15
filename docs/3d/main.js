@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=11";
-import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=11";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=11";
-import { makeFx } from "./fx.js?v=11";
-import { Rocks, Footprints, Dust } from "./props.js?v=11";
-import { Sound } from "./sound.js?v=11";
+import * as P from "./plan.js?v=12";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=12";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=12";
+import { makeFx } from "./fx.js?v=12";
+import { Rocks, Footprints, Dust } from "./props.js?v=12";
+import { Sound } from "./sound.js?v=12";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -163,6 +163,7 @@ function placeLabels() {
     }
     _v.copy(l.v).project(camera);
     if (_v.z > 1 || _v.z < -1 || Math.abs(_v.x) > 1.15 || Math.abs(_v.y) > 1.2) show = false;
+    if (l.kind === "stop" && S.view !== "cine" && (w > h ? Math.abs(_v.x) > 0.42 : _v.y > 0.12)) show = false;   // the helmet display's columns are there
     if (show !== l.shown) { l.el.style.display = show ? "" : "none"; l.shown = show; }
     if (show) l.el.style.transform = `translate(${((_v.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-_v.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(-50%, -100%)`;
   }

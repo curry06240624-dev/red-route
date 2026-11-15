@@ -323,3 +323,37 @@ body.intro #helm { opacity: 0; }
   #bSuit { display: none; }
   .h-status { bottom: 6px; }
 }
+
+/* ================= the helmet itself (first person): padding around the visor, its rim, the edge of the glass ================= */
+#visor { background: none; box-shadow: none; z-index: 17; }
+#visor svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#visor path { vector-effect: non-scaling-stroke; fill: none; }
+#visor .v-pad { fill: url(#vPad); }
+#visor .v-glass { stroke: rgba(6, 4, 3, .5); stroke-width: 150px; filter: blur(26px); }                 /* the picture dims toward the edge of the glass */
+#visor .v-edge { stroke: rgba(255, 236, 214, .13); stroke-width: 20px; filter: blur(5px); }            /* light caught in the thick edge of the glass */
+#visor .v-seal { stroke: #070605; stroke-width: 15px; }                                                   /* the rubber seal */
+#visor .v-rim { stroke: #5a5049; stroke-width: 2.5px; }                                                   /* the metal rim on the seal */
+#visor .v-light { stroke: rgba(255, 232, 205, .55); stroke-width: 1.2px; filter: blur(.4px); }           /* the low sun on the rim */
+body.first #hTape { top: calc(4px + 3.1vh); }
+body.first .h-stops { top: calc(min(820px, 62vw) * .1 + 18px + 3.1vh); }
+body.first .mini { left: 5.6vw; bottom: calc(74px + 3.4vh); }
+body.first .ai-label { left: 5.6vw; bottom: calc(clamp(170px, 17vw, 250px) * .43 + 86px + 3.4vh); }
+body.first .h-left { left: 4.6vw; } body.first .h-right { right: 4.6vw; }
+body.first .h-status { bottom: calc(72px + 1.6vh); }
+body.first .brand { top: 1.4vh; left: 1.6vw; opacity: .9; }
+@media (max-width: 900px) and (orientation: portrait) {
+  body.first #hTape { top: calc(30px + var(--sat)); }
+  body.first .h-side { top: calc(92px + var(--sat)); }
+  body.first .h-left { left: 16px; } body.first .h-right { right: 16px; }
+  body.first .ai-label { left: 14px; bottom: calc(172px + var(--sab)); }
+  body.first .h-status { bottom: calc(196px + var(--sab)); }
+  #visor svg { inset: -2.5% -9%; width: 118%; height: 105%; }   /* upright phone: the helmet's curved corners, the sides run off the screen */
+  #visor .v-glass { stroke-width: 70px; } #visor .v-seal { stroke-width: 11px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  body.first #hTape { top: 12px; } body.first .h-side { top: 60px; }
+  body.first .ai-label { left: 5vw; top: 16px; bottom: auto; }
+  body.first .h-status { bottom: 8px; }
+  #visor .v-glass { stroke-width: 90px; } #visor .v-seal { stroke-width: 11px; }
+}
+body.intro #visor { opacity: 0; }
