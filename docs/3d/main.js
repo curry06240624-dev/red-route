@@ -1,0 +1,604 @@
+/* Red Route 3D walk: a free walk on the Marswalk plan, with the app's get-home numbers in the helmet display.
+   Two ways to move:
+     "plan"  the crew is where the plan puts it at mission time T (same clock maths as the main app), so every number equals the app's;
+     "free"  you walk anywhere. On the planned route the walk-home time is the plan's own; off the route it is read from the
+             walk-home layer with the app's "What if here?" method. The clock runs only while you walk or work at a stop.
+   Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
+   AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
+import * as THREE from "three";
+import * as P from "./plan.js?v=4";
+import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=4";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=4";
+
+const $ = (s) => document.querySelector(s);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const DEG = Math.PI / 180;
+const ARRIVE_M = 12, LEAVE_M = 22, ON_ROUTE_M = 15;
+const DWELL_RATE = 600;          // while the crew works at a stop, the clock runs this many times faster than real time
+const SPEEDS = [1, 10, 30, 60];
+const DEFAULT_ORDER = ["base", "depot", "gap", "top", "base"];
+const Q = new URLSearchParams(location.search);
+const TOUCH = window.matchMedia("(pointer: coarse)").matches || Q.get("touch") === "1";
+
+const S = {
+  m: null, base: null, route: null, baseRoute: null, field: null, legEnd: [],
+  mode: "free", playing: false, T: 0, speed: 30, view: "first",
+  yaw: 0, pitch: -4, lookOff: 0, heading: 0,
+  pos: { x: 0, z: 0 }, moving: 0,
+  free: null, nav: null, drill: null, started: false, tenby: false, lastDrag: 0,
+};
+const freshFree = () => ({ leg: 0, hereIdx: -1, worked: {}, working: null, home: false, homeT: null });
+let G, renderer, scene, camera, sky, lights, terrain, routeLine, markers, ev1, ev2, worker = null, planId = 0, workerReady = false;
+const labels = [];
+
+/* ---------- loading ---------- */
+function prog(pct, msg) { $("#lBar").style.width = `${pct}%`; if (msg) $("#lMsg").textContent = msg; }
+const getData = (f) => fetch(`../data/${f}`, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(`${f}: ${r.status}`); return r; });
+
+async function boot() {
+  prog(8, "Loading the plan…");
+  const [mission, routeGj] = await Promise.all([getData("mission.json").then((r) => r.json()), getData("route.geojson").then((r) => r.json())]);
+  prog(30, "Loading the terrain…");
+  const [demB, slopeB, roughB] = await Promise.all(["grid_dem.i16", "grid_slope.u8", "grid_rough.u8"].map((f) => getData(f).then((r) => r.arrayBuffer())));
+  S.m = mission; S.base = clone(mission);
+  S.route = S.baseRoute = P.makeRoute(routeGj.features.map((f) => f.geometry.coordinates));
+  setLegEnds();
+  G = new Ground(mission.grid, new Int16Array(demB), new Uint8Array(slopeB), new Uint8Array(roughB));
+  prog(55, "Building the ground…");
+  await new Promise((r) => setTimeout(r, 30));
+  initScene();
+  prog(80, "Working out the way home…");
+  initWorker(mission, slopeB.slice(0), roughB.slice(0), demB.slice(0));
+  initHud();
+  resetToStart();
+  requestAnimationFrame(frame);
+  prog(100, "Ready");
+  $("#lStart").hidden = false;
+  loadAstronautModel("assets/astronaut.glb?v=4").then((model) => {
+    ev1.useModel(model); ev2.useModel(model);
+    $("#aiLabel").hidden = false; S.aiModel = true;
+  }).catch((e) => { console.warn("The AI astronaut model did not load; using the code-made figure.", e); });
+  const auto = Q.get("auto");
+  if (auto) start(auto === "plan" ? "plan" : "free");
+}
+
+function setLegEnds() { S.legEnd = []; for (const p of S.m.profile) S.legEnd[p.leg] = p.d; }
+
+/* ---------- scene ---------- */
+function initScene() {
+  const canvas = $("#view");
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.6 : 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.00030);
+  camera = new THREE.PerspectiveCamera(62, 1, 0.45, 12000);
+  camera.rotation.order = "YXZ";
+  sky = buildSky(scene);
+  lights = buildLights(scene);
+  const sh = lights.sun.shadow;
+  lights.sun.castShadow = true; sh.mapSize.set(1024, 1024); sh.camera.near = 1; sh.camera.far = 80;
+  sh.camera.left = -9; sh.camera.right = 9; sh.camera.top = 9; sh.camera.bottom = -9; sh.bias = -0.0015; sh.normalBias = 0.04;
+  terrain = buildTerrain(scene, G, S.m.assumptions.max_slope_deg, 1);
+  routeLine = new RouteLine(scene, G);
+  routeLine.set(S.route);
+  markers = new StopMarkers(scene, G);
+  const b = P.stopById(S.m, "base");
+  buildHabitat(scene, G, b.lat, b.lon);
+  ev1 = new Astronaut(scene, 0xff6a3d); ev2 = new Astronaut(scene, 0x38bdf8);
+  refreshStops();
+  resize();
+  window.addEventListener("resize", resize);
+}
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.fov = w < h ? 74 : 62; camera.updateProjectionMatrix();
+  routeLine.setResolution(w, h);
+}
+
+/* ---------- stops and their labels ---------- */
+function refreshStops() {
+  const m = S.m, tl = m.timeline || [];
+  const list = m.stops.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, optional: !m.order.includes(s.id), color: s.id === "base" ? 0x38bdf8 : m.order.includes(s.id) ? 0xff6a3d : 0x8a8f96 }));
+  markers.set(list);
+  for (const l of labels.splice(0)) l.el.remove();
+  for (const it of markers.items) {
+    const s = P.stopById(m, it.id), i = m.order.indexOf(it.id), el = document.createElement("div");
+    el.className = `slabel${it.id === "base" ? " base" : i < 0 ? " opt" : ""}`;
+    const sub = it.id === "base" ? `Be home by T+${P.hm(m.walkback.budget_min)}` : i < 0 ? "Optional stop, not in this plan" : `Leave by T+${P.hm(P.leaveBy(tl[i]))}`;
+    el.innerHTML = `${it.id === "base" ? "" : i >= 0 ? `${i + 1} · ` : ""}${esc(P.shortName(s))}<small>${sub}</small>`;
+    $("#labels").appendChild(el);
+    labels.push({ el, v: it.top, kind: "stop", shown: false });
+  }
+  for (const [a, txt, cls] of [[ev1, "EV1 · you", "crew"], [ev2, "EV2", "crew ev2"]]) {
+    const el = document.createElement("div"); el.className = `slabel ${cls}`; el.textContent = txt;
+    $("#labels").appendChild(el);
+    labels.push({ el, v: new THREE.Vector3(), kind: "crew", who: a, shown: false });
+  }
+}
+const _v = new THREE.Vector3();
+function placeLabels() {
+  const w = window.innerWidth, h = window.innerHeight;
+  for (const l of labels) {
+    let show = true;
+    if (l.kind === "crew") {
+      l.v.set(l.who.x, l.who.root.position.y + 2.12, l.who.z);
+      if (l.who === ev1 && S.view === "first") show = false;
+      if (camera.position.distanceTo(l.v) > 45) show = false;
+    }
+    _v.copy(l.v).project(camera);
+    if (_v.z > 1 || _v.z < -1 || Math.abs(_v.x) > 1.15 || Math.abs(_v.y) > 1.2) show = false;
+    if (show !== l.shown) { l.el.style.display = show ? "" : "none"; l.shown = show; }
+    if (show) l.el.style.transform = `translate(${((_v.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-_v.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(-50%, -100%)`;
+  }
+}
+
+/* ---------- the walk-home layer and re-planning: the app's own router.js, as a web worker ---------- */
+function params() {
+  const a = S.base.assumptions;
+  return { maxSlope: a.max_slope_deg, vFlat: a.v_flat_ms, roughPenalty: a.rough_penalty, roughM: a.rough_m, evaH: a.eva_limit_h, reserve: a.reserve,
+    airlockMin: a.airlock_min || 0, badFactor: a.bad_day_factor || 2, suitMin: a.suit_fail_min || 50 };
+}
+function initWorker(m, slope, rough, dem) {
+  if (!window.Worker) return;
+  try {
+    worker = new Worker("../router.js?v=8");
+    worker.onmessage = onWorker;
+    worker.postMessage({ type: "init", grid: m.grid, slope, rough, dem }, [slope, rough, dem]);
+  } catch (e) { console.warn("No route worker", e); worker = null; }
+}
+function onWorker(e) {
+  const r = e.data;
+  if (r.type === "ready") {
+    workerReady = true;
+    worker.postMessage({ type: "field", id: ++planId, params: params(), stops: S.m.stops.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
+    $("#oTenby").disabled = false;
+    if (Q.get("tenby") === "1") { $("#oTenby").checked = true; setTenby(true); }
+    return;
+  }
+  if (r.type === "field") { S.field = r.field; S.baseField = r.field; return; }
+  if (r.type !== "plan" || r.id !== planId) return;
+  if (r.error) { toast(`${r.error}. Showing the last plan that worked.`); $("#oTenby").checked = false; $("#oTenbyNote").textContent = ""; return; }
+  const m = clone(S.base);
+  m.order = [...new Set(r.legs.map((l) => l.frm))].concat(["base"]);
+  m.legs = r.legs.map(({ coords, ...l }) => l);
+  m.totals = r.totals; m.walkback = r.walkback; m.profile = r.profile; m.timeline = r.timeline;
+  for (const s of m.stops) { const c = r.stopCells[s.id]; if (c) { s.lon = c.lonlat[0]; s.lat = c.lonlat[1]; s.elev_m = c.z; } }
+  S.m = m; S.route = P.makeRoute(r.legs.map((l) => l.coords)); S.field = r.field; S.tenby = true;
+  $("#oTenbyNote").textContent = `· re-planned in the browser (${(r.ms / 1000).toFixed(1)} s, ${m.grid.gx.toFixed(1)} m grid)`;
+  planChanged();
+}
+function setTenby(on) {
+  if (!on) {
+    S.m = clone(S.base); S.route = S.baseRoute; S.field = S.baseField; S.tenby = false; $("#oTenbyNote").textContent = "";
+    planChanged(); return;
+  }
+  if (!worker || !workerReady) { $("#oTenby").checked = false; toast("Still loading the terrain for re-planning. Try again in a moment."); return; }
+  $("#oTenbyNote").textContent = "· re-planning…";
+  worker.postMessage({ type: "plan", id: ++planId, params: params(), order: DEFAULT_ORDER,
+    stops: S.base.stops.map((s) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, dwell_min: s.dwell_min })) });
+}
+function planChanged() {
+  setLegEnds(); routeLine.set(S.route); refreshStops(); closeDrill(); buildMini();
+  const wasPlan = S.mode === "plan";
+  resetToStart(); if (wasPlan) S.mode = "plan";
+  renderMenu(); S.hudKey = "";
+}
+
+/* ---------- state changes ---------- */
+function resetToStart() {
+  const b = P.stopById(S.m, "base");
+  S.T = 0; S.playing = false; S.free = freshFree();
+  S.pos.x = G.xOf(b.lon); S.pos.z = G.zOf(b.lat);
+  const ahead = P.pointAtDistance(S.route, 12);
+  S.heading = P.bearing([b.lat, b.lon], ahead); S.yaw = S.heading; S.lookOff = 0; S.pitch = -4;
+}
+function start(mode) {
+  S.started = true;
+  $("#loader").classList.add("done"); document.body.classList.remove("loading");
+  $("#hud").hidden = false;
+  if (TOUCH) document.body.classList.add("touch");
+  if (Q.get("view") === "third") setView("third");
+  if (Q.get("speed")) S.speed = +Q.get("speed") || 30;
+  if (mode === "plan") { S.mode = "plan"; S.playing = true; } else S.mode = "free";
+  if (Q.get("t") != null) jump(parseFloat(Q.get("t")), Q.get("play") === "1");
+  if (Q.get("menu") === "1") toggleMenu(true);
+  if (Q.get("drill")) setTimeout(() => openDrill(Q.get("drill")), 400);
+  syncButtons();
+}
+function jump(T, play = false) {
+  closeDrill();
+  S.mode = "plan"; S.T = Math.max(0, T); S.playing = play; S.lookOff = 0; S.free = freshFree();
+  const n = P.navOnPlan(S.m, S.route, S.T);
+  S.pos.x = G.xOf(n.pos[1]); S.pos.z = G.zOf(n.pos[0]);
+  S.heading = planHeading(n, S.heading, true); S.yaw = S.heading;
+  syncButtons(); S.hudKey = "";
+}
+// take over by hand from wherever the plan has the crew
+function enterFree() {
+  if (S.mode === "free") return;
+  const n = P.navOnPlan(S.m, S.route, S.T), F = freshFree(), tl = S.m.timeline || [];
+  F.leg = Math.min(n.leg, S.m.order.length - 2);
+  for (let i = 1; i <= F.leg; i++) F.worked[S.m.order[i]] = true;
+  if (n.here) { F.hereIdx = n.hereIdx; F.worked[n.here.id] = S.T >= tl[n.hereIdx].depart_min - 0.05; }
+  if (n.after) { F.home = true; F.homeT = S.m.profile[S.m.profile.length - 1].t; }
+  S.free = F; S.mode = "free"; S.playing = false; S.yaw = S.heading + S.lookOff; S.lookOff = 0;
+  syncButtons(); S.hudKey = "";
+}
+function setView(v) {
+  S.view = v;
+  document.body.classList.toggle("first", v === "first");
+  $("#bView").textContent = v === "first" ? "Third person" : "First person";
+  if (v === "third" && S.pitch > -6) S.pitch = -12;
+  if (v === "first" && S.pitch < -8) S.pitch = -4;
+}
+function syncButtons() {
+  const on = S.mode === "plan" && S.playing;
+  $("#bPlan").innerHTML = `<span class="${on ? "sq" : "tri"}"></span><span>${on ? "Pause the plan" : S.mode === "plan" && S.T > 0 ? "Go on with the plan" : "Follow the plan"}</span>`;
+  $("#bPlan").classList.toggle("on", on);
+  $("#bSpeed").textContent = `× ${S.speed}`;
+}
+let toastTimer = 0;
+function toast(msg, ms = 5000) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), ms); }
+
+/* ---------- input ---------- */
+const keys = new Set(), stick = { x: 0, y: 0, id: null };
+function initInput() {
+  const MOVE = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 };
+  window.addEventListener("keydown", (e) => {
+    if (e.target.closest && e.target.closest("input, textarea")) return;
+    if (!S.started || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (MOVE[e.code]) { keys.add(e.code); e.preventDefault(); }
+    else if (e.code === "KeyV") setView(S.view === "first" ? "third" : "first");
+    else if (e.code === "Space") { e.preventDefault(); $("#bPlan").click(); }
+    else if (e.code === "Escape") { closeDrill(); toggleMenu(false); }
+  });
+  window.addEventListener("keyup", (e) => keys.delete(e.code));
+  window.addEventListener("blur", () => keys.clear());
+  const cv = $("#view");
+  let drag = null;
+  cv.addEventListener("pointerdown", (e) => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.classList.add("drag"); });
+  cv.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const k = e.pointerType === "touch" ? 0.28 : 0.2, dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (S.mode === "plan") S.lookOff += dx; else S.yaw = (S.yaw + dx + 360) % 360;
+    S.pitch = Math.max(-70, Math.min(55, S.pitch - dy));
+    S.lastDrag = performance.now();
+  });
+  const end = (e) => { if (drag && e.pointerId === drag.id) { drag = null; cv.classList.remove("drag"); } };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+  // the walking stick (touch)
+  const st = $("#stick"), knob = st.querySelector("i");
+  const setStick = (e) => {
+    const r = st.getBoundingClientRect(), R = r.width / 2;
+    let x = (e.clientX - (r.left + R)) / (R * 0.8), y = (e.clientY - (r.top + R)) / (R * 0.8);
+    const len = Math.hypot(x, y); if (len > 1) { x /= len; y /= len; }
+    stick.x = x; stick.y = y; knob.style.transform = `translate(${x * R * 0.6}px, ${y * R * 0.6}px)`;
+  };
+  st.addEventListener("pointerdown", (e) => { stick.id = e.pointerId; st.setPointerCapture(e.pointerId); setStick(e); e.preventDefault(); });
+  st.addEventListener("pointermove", (e) => { if (e.pointerId === stick.id) setStick(e); });
+  const sEnd = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; } };
+  st.addEventListener("pointerup", sEnd); st.addEventListener("pointercancel", sEnd);
+}
+function moveInput() {
+  let f = 0, r = 0;
+  if (keys.has("KeyW") || keys.has("ArrowUp")) f += 1;
+  if (keys.has("KeyS") || keys.has("ArrowDown")) f -= 1;
+  if (keys.has("KeyD") || keys.has("ArrowRight")) r += 1;
+  if (keys.has("KeyA") || keys.has("ArrowLeft")) r -= 1;
+  if (stick.id !== null) { f -= stick.y; r += stick.x; }
+  const len = Math.hypot(f, r);
+  if (len > 1) { f /= len; r /= len; }
+  return { f, r, len: Math.min(1, len) };
+}
+
+/* ---------- the walk ---------- */
+const turn = (from, to, k) => from + ((((to - from) % 360) + 540) % 360 - 180) * k;
+function planHeading(n, old, snap) {
+  if (n.after) return old;
+  // at a stop the crew faces the way the next leg leaves
+  const end = S.legEnd[n.leg] ?? n.d, a = P.pointAtDistance(S.route, Math.min(end, n.d + 7));
+  if (P.metres(n.pos, a) < 0.5) return old;
+  return P.bearing(n.pos, a);
+}
+function walkSpeed(x, z) {   // m/s, the planner's model
+  const a = S.m.assumptions, s = G.slopeAt(x, z);
+  let v = a.v_flat_ms * Math.exp(-3.5 * Math.tan((s == null ? 30 : Math.min(s, 60)) * DEG));
+  if (G.roughAt(x, z) > a.rough_m) v /= a.rough_penalty;
+  return v;
+}
+function update(dt) {
+  const m = S.m, inp = S.started && !S.menuOpen ? moveInput() : { f: 0, r: 0, len: 0 };
+  let moving = 0;
+  if (S.mode === "plan") {
+    if (inp.len > 0.15) { enterFree(); }
+    else {
+      const lastT = m.profile[m.profile.length - 1].t;
+      if (S.playing) {
+        const st = P.stateAt(m, S.T);
+        S.T = Math.min(lastT + 0.01, S.T + (dt * (st.gap ? Math.max(S.speed, DWELL_RATE) : S.speed)) / 60);
+        if (S.T >= lastT) { S.playing = false; syncButtons(); }
+      }
+      const n = P.navOnPlan(m, S.route, S.T);
+      S.pos.x = G.xOf(n.pos[1]); S.pos.z = G.zOf(n.pos[0]);
+      S.heading = turn(S.heading, planHeading(n, S.heading), Math.min(1, dt * 6));
+      moving = S.playing && !n.here && !n.after ? 1 : 0;
+      if (S.playing && performance.now() - S.lastDrag > 3500) S.lookOff *= Math.max(0, 1 - dt * 1.5);   // look ahead again after a while
+      S.yaw = S.heading + S.lookOff;
+    }
+  }
+  if (S.mode === "free") {
+    const F = S.free;
+    if (F.working) {
+      S.T += (dt * DWELL_RATE) / 60;
+      if (S.T >= F.working.until || inp.len > 0.15) { if (S.T >= F.working.until) { S.T = F.working.until; F.worked[F.working.id] = true; } F.working = null; S.hudKey = ""; }
+    } else if (inp.len > 0.05 && !F.home) {
+      const dir = S.yaw * DEG, sim = dt * S.speed;
+      const dx = Math.sin(dir) * inp.f + Math.cos(dir) * inp.r, dz = -Math.cos(dir) * inp.f + Math.sin(dir) * inp.r;
+      const steps = Math.max(1, Math.ceil((sim * 0.6) / 1.5));
+      for (let i = 0; i < steps; i++) {
+        const d = walkSpeed(S.pos.x, S.pos.z) * (sim / steps), nx = S.pos.x + dx * d, nz = S.pos.z + dz * d;
+        if (!G.inside(nx, nz, 10)) { if (!S.edgeToast || performance.now() - S.edgeToast > 6000) { toast("This is the edge of the mapped ground."); S.edgeToast = performance.now(); } break; }
+        S.pos.x = nx; S.pos.z = nz;
+      }
+      S.T += sim / 60;
+      S.heading = turn(S.heading, (Math.atan2(dx, -dz) / DEG + 360) % 360, Math.min(1, dt * 9));
+      moving = inp.len;
+      // arriving at the next stop, leaving the one we are at
+      const next = P.stopById(m, m.order[F.leg + 1]), last = m.order.length - 1;
+      const dn = Math.hypot(G.xOf(next.lon) - S.pos.x, G.zOf(next.lat) - S.pos.z);
+      if (dn < ARRIVE_M) {
+        if (F.leg + 1 === last) { F.home = true; F.homeT = S.T; F.hereIdx = -1; }
+        else { F.hereIdx = F.leg + 1; F.leg += 1; }
+        S.hudKey = "";
+      } else if (F.hereIdx >= 0) {
+        const h = P.stopById(m, m.order[F.hereIdx]);
+        if (Math.hypot(G.xOf(h.lon) - S.pos.x, G.zOf(h.lat) - S.pos.z) > LEAVE_M) { F.hereIdx = -1; S.hudKey = ""; }
+      }
+    }
+  }
+  S.moving = moving;
+  // crew
+  const y = G.height(S.pos.x, S.pos.z), rate = Math.max(0.9, Math.min(1.9, 0.85 + S.speed / 45));
+  ev1.place(S.pos.x, y, S.pos.z, S.heading); ev1.update(dt, moving > 0.05 ? 1 : 0, rate);
+  const h = S.heading * DEG, port = camera.aspect < 1, offR = port ? 1.0 : 2.1, offF = port ? 4.2 : 4.6;
+  const tx = S.pos.x + Math.cos(h) * offR + Math.sin(h) * offF, tz = S.pos.z + Math.sin(h) * offR - Math.cos(h) * offF;
+  if (!S.ev2init) { ev2.x = tx; ev2.z = tz; S.ev2init = true; }
+  const k = Math.min(1, dt * (4 + S.speed * 0.25 * (moving > 0 ? 1 : 0.2))), ox = ev2.x, oz = ev2.z;
+  const nx2 = ox + (tx - ox) * k, nz2 = oz + (tz - oz) * k, gap = Math.hypot(tx - nx2, tz - nz2);
+  const ev2moving = moving > 0.05 || gap > 0.25;
+  const hd2 = gap > 0.4 && !(moving > 0.05) ? (Math.atan2(tx - ox, -(tz - oz)) / DEG + 360) % 360 : S.heading;
+  ev2.place(nx2, G.height(nx2, nz2), nz2, turn(ev2.hdg || S.heading, hd2, Math.min(1, dt * 6)));
+  ev2.update(dt, ev2moving ? 1 : 0, rate);
+  ev1.root.visible = S.view === "third";
+  // camera
+  const yaw = S.yaw * DEG, pit = S.pitch * DEG;
+  if (S.view === "first") camera.position.set(S.pos.x, y + 1.62, S.pos.z);
+  else {
+    const back = 5.4, fx = Math.sin(yaw) * Math.cos(pit), fy = Math.sin(pit), fz = -Math.cos(yaw) * Math.cos(pit);
+    let cx = S.pos.x - fx * back, cy = y + 1.75 - fy * back, cz = S.pos.z - fz * back;
+    const gy = G.height(cx, cz) + 0.7; if (cy < gy) cy = gy;
+    camera.position.set(cx, cy, cz);
+  }
+  camera.rotation.set(pit, -yaw, 0);
+  sky.position.copy(camera.position);
+  lights.sun.position.set(S.pos.x + SUN_DIR.x * 40, y + SUN_DIR.y * 40, S.pos.z + SUN_DIR.z * 40);
+  lights.sun.target.position.set(S.pos.x, y, S.pos.z); lights.sun.target.updateMatrixWorld();
+}
+
+/* ---------- the numbers where you stand ---------- */
+function navNow() {
+  const m = S.m;
+  if (S.mode === "plan") {
+    const n = P.navOnPlan(m, S.route, S.T);
+    n.along = n.after ? 0 : Math.max(0, (S.legEnd[n.leg] ?? n.d) - n.d);
+    return n;
+  }
+  const F = S.free, wb = m.walkback, bf = wb.bad ? wb.bad.factor : 2, lim = wb.suit ? wb.suit.limit_min : 50, Bb = wb.bad ? wb.bad.budget_min : wb.budget_min;
+  const ll = [G.latOf(S.pos.z), G.lonOf(S.pos.x)], baseS = P.stopById(m, "base");
+  if (F.home) return { T: S.T, back: 0, mPlan: wb.budget_min - F.homeT, mBad: Bb - F.homeT, lim, after: true, homeT: F.homeT, here: null, hereIdx: -1, nextS: baseS, dist: 0, pos: ll, leg: m.order.length - 2, src: "plan", off: 0, along: 0 };
+  let any = P.nearestOnRoute(S.route, ll, F.leg), on = any && any.off <= ON_ROUTE_M ? any : null;
+  if (!on) { any = P.nearestOnRoute(S.route, ll); on = any && any.off <= ON_ROUTE_M ? any : null; }
+  let back = 0, src, moved = 0;
+  if (on) { back = P.profileAt(m, on.leg, on.d).back; src = "plan"; }
+  else {
+    const sp = P.readSpot(m, S.field, ll[0], ll[1]);
+    if (sp.kind === "ok") { back = sp.back; src = "layer"; moved = sp.moved; } else src = sp.kind === "wait" ? "wait" : "none";
+  }
+  const nextS = P.stopById(m, m.order[F.leg + 1]) || baseS, here = F.hereIdx >= 0 ? P.stopById(m, m.order[F.hereIdx]) : null;
+  return { T: S.T, back, mPlan: wb.budget_min - (S.T + back), mBad: Bb - (S.T + bf * back), lim, after: false, here, hereIdx: F.hereIdx, nextS,
+    dist: P.metres(ll, [nextS.lat, nextS.lon]), pos: ll, leg: F.leg, d: on ? on.d : null, onLeg: on ? on.leg : -1, src, moved,
+    off: any ? any.off : 0, nearPt: any ? any.pt : null, along: on && on.leg === F.leg ? Math.max(0, (S.legEnd[F.leg] ?? on.d) - on.d) : null };
+}
+
+/* ---------- helmet display ---------- */
+const cache = new Map();
+function put(id, html, cls) {
+  const el = document.getElementById(id), key = `${html}|${cls ?? ""}`;
+  if (cache.get(id) === key) return;
+  cache.set(id, key); el.innerHTML = html; if (cls != null) el.className = cls;
+}
+const km = (d) => (d >= 1000 ? `${(d / 1000).toFixed(2)} km` : `${Math.round(d)} m`);
+function renderHud() {
+  const m = S.m, n = navNow(), tl = m.timeline || [], wb = m.walkback;
+  S.nav = n;
+  const v = P.verdict(m, n), known = n.src !== "none" && n.src !== "wait";
+  put("hMode", S.mode === "plan" ? (S.playing ? "Following the plan" : "On the plan · paused") : S.free.working ? "Working at the stop" : "Free walk");
+  put("hMet", `T+${P.hm(S.T)}`);
+  put("hWord", n.src === "wait" ? "…" : v.word);
+  put("hSpare", n.src === "wait" ? "Working out the way home…" : esc(v.spare));
+  $("#hStatus").className = `pnl status ${n.src === "wait" ? "" : v.cls}`;
+  put("hHurt", n.after || !known ? "" : `If EV2 is hurt and EV1 helps: <b class="${n.mBad < 0 ? "bad" : ""}">${P.fmtMin(n.mBad)} ${n.mBad < 0 ? "short" : "to spare"}</b>`);
+  // walk home against the backup oxygen
+  put("hBack", known ? `${Math.round(n.back)} MIN` : "–", known && n.back > n.lim ? "bad" : "");
+  $("#hO2").style.width = `${known ? Math.min(100, (n.back / n.lim) * 100) : 0}%`;
+  $("#hO2bar").className = `o2bar ${known && n.back > n.lim ? "bad" : known && n.back > n.lim * 0.8 ? "warn" : ""}`;
+  put("hO2txt", !known ? (n.src === "none" ? "No way home on foot from here" : "") : n.back > n.lim ? `Beyond the ${n.lim} min of backup oxygen` : `Inside the ${n.lim} min of backup oxygen`, known && n.back > n.lim ? "bad" : "");
+  // next stop
+  const camYaw = S.yaw;
+  let brg = null;
+  if (n.after) { put("hNextLbl", "Status"); put("hNext", "BASE CAMP"); put("hNextSub", "Crew is back inside"); }
+  else {
+    const onLeg = n.along != null;
+    let tgt = [n.nextS.lat, n.nextS.lon];
+    if (onLeg && n.along > 5) tgt = P.pointAtDistance(S.route, Math.min(S.legEnd[n.leg], n.d + 60));
+    else if (!onLeg && n.nearPt && n.off > ON_ROUTE_M) tgt = [n.nextS.lat, n.nextS.lon];
+    brg = P.bearing(n.pos, tgt);
+    put("hNextLbl", n.here ? `On site · next` : n.nextS.id === "base" ? "Heading home" : "Next stop");
+    put("hNext", esc(P.shortName(n.nextS).toUpperCase()));
+    put("hNextSub", onLeg ? `${km(n.along)} along the route · ${P.compass(brg)}` : `${km(n.dist)} in a straight line · ${P.compass(brg)}`);
+  }
+  $("#hArrow").style.display = brg == null ? "none" : "";
+  if (brg != null) $("#hArrow").style.transform = `rotate(${(brg - camYaw).toFixed(1)}deg)`;
+  // leave-by
+  if (n.after) { put("hLeaveLbl", "Home"); put("hLeave", `T+${P.hm(n.homeT ?? m.profile[m.profile.length - 1].t)}`); put("hLeaveSub", `Had to be home by T+${P.hm(wb.budget_min)}`, ""); }
+  else {
+    const i = n.here ? n.hereIdx : n.leg + 1, s = n.here || n.nextS;
+    if (s.id === "base") { put("hLeaveLbl", "Be home by"); put("hLeave", `T+${P.hm(wb.budget_min)}`); put("hLeaveSub", `The plan is home at T+${P.hm(tl[tl.length - 1].arrive_min)}`, ""); }
+    else {
+      const lb = P.leaveBy(tl[i]), left = lb - S.T;
+      put("hLeaveLbl", `Leave ${esc(P.shortName(s))} by`); put("hLeave", `T+${P.hm(lb)}`, left < 0 ? "bad" : "");
+      put("hLeaveSub", left < 0 ? `${P.fmtMin(left)} past the leave-by time` : n.here ? `${P.fmtMin(left)} from now` : `The plan leaves at T+${P.hm(tl[i].depart_min)}`, left < 0 ? "bad" : "");
+    }
+  }
+  // slope ahead and the route
+  const hd = (S.mode === "plan" ? S.heading : S.yaw) * DEG, sA = G.slopeAt(S.pos.x + Math.sin(hd) * 6, S.pos.z - Math.cos(hd) * 6), lim = m.assumptions.max_slope_deg;
+  put("hSlope", sA == null ? "–" : `${Math.round(sA)}°${sA > lim ? " · NO-GO" : ""}`, sA != null && sA > lim ? "bad" : "");
+  if (n.after) put("hRoute", "", "");
+  else if (S.mode === "plan" || n.src === "plan") put("hRoute", "On the planned route", "");
+  else put("hRoute", `OFF ROUTE · ${km(n.off)} from the route${n.nearPt ? ` (${P.compass(P.bearing(n.pos, n.nearPt))})` : ""}`, "warn");
+  // at a stop
+  const site = $("#hSite");
+  let sh = "";
+  if (S.mode === "free" && S.free.home) sh = `<span>Back at base camp. EVA complete at T+${P.hm(S.free.homeT)}.</span><button data-act="again">Walk again</button>`;
+  else if (S.mode === "free" && S.free.working) sh = `<span>Working at ${esc(P.shortName(n.here || n.nextS))}: ${P.fmtMin(S.free.working.until - S.T)} left</span><button data-act="stopwork">Stop</button>`;
+  else if (S.mode === "free" && n.here && n.here.dwell_min > 0 && !S.free.worked[n.here.id]) sh = `<span>At ${esc(P.shortName(n.here))}. The plan works here for ${n.here.dwell_min} min.</span><button data-act="work">Do the stop work</button>`;
+  else if (S.mode === "plan" && n.here) sh = `<span>On site at ${esc(P.shortName(n.here))}. The plan leaves at T+${P.hm(tl[n.hereIdx].depart_min)}.</span>`;
+  if (cache.get("site") !== sh) { cache.set("site", sh); site.innerHTML = sh; site.hidden = !sh; }
+  drawMini(n);
+  if (S.drill && Math.abs(S.T - S.drill.T) > 0.02) closeDrill();
+}
+
+/* ---------- small map ---------- */
+const mini = { bg: document.createElement("canvas"), img: null };
+function buildMini() {
+  const c = mini.bg, cv = $("#miniMap"); c.width = cv.width; c.height = cv.height;
+  const ctx = c.getContext("2d"), W = c.width, H = c.height;
+  ctx.fillStyle = "#2a1c15"; ctx.fillRect(0, 0, W, H);
+  if (mini.img) { ctx.globalAlpha = 0.85; ctx.drawImage(mini.img, 0, 0, W, H); ctx.globalAlpha = 1; ctx.fillStyle = "rgba(60, 28, 12, .35)"; ctx.fillRect(0, 0, W, H); }
+  const X = (lon) => (G.xOf(lon) / G.sizeX) * W, Y = (lat) => (G.zOf(lat) / G.sizeZ) * H;
+  ctx.lineJoin = ctx.lineCap = "round";
+  for (const [w, col] of [[7, "rgba(11,11,11,.7)"], [3.5, "#ff6a3d"]]) {
+    ctx.lineWidth = w; ctx.strokeStyle = col; ctx.beginPath();
+    S.route.pts.forEach((p, i) => (i ? ctx.lineTo(X(p[1]), Y(p[0])) : ctx.moveTo(X(p[1]), Y(p[0])))); ctx.stroke();
+  }
+  for (const id of new Set(S.m.order)) {
+    const s = P.stopById(S.m, id);
+    ctx.beginPath(); ctx.arc(X(s.lon), Y(s.lat), 6, 0, 7); ctx.fillStyle = id === "base" ? "#38bdf8" : "#ff6a3d"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+  }
+}
+function drawMini() {
+  const cv = $("#miniMap"); if (!cv.offsetParent) return;
+  const ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.drawImage(mini.bg, 0, 0);
+  const x = (S.pos.x / G.sizeX) * W, y = (S.pos.z / G.sizeZ) * H, a = S.yaw * DEG;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.closePath();
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#0b0b0b"; ctx.stroke(); ctx.restore();
+}
+
+/* ---------- drills ---------- */
+function openDrill(type) {
+  const n = S.nav || navNow();
+  if (!n || n.after) return;
+  if (S.mode === "plan" && S.playing) { S.playing = false; syncButtons(); }
+  if (S.free && S.free.working) S.free.working = null;
+  const where = n.here ? `at ${P.shortName(n.here)}` : S.mode === "plan" || n.src === "plan" ? `on the way to ${P.shortName(n.nextS)}` : "off the route";
+  let h;
+  if (n.src === "none" || n.src === "wait") {
+    h = `<div class="dt">${type === "suit" ? "Suit alarm" : "Crewmate hurt (EV2)"}</div><div class="dv bad">${n.src === "wait" ? "ONE MOMENT" : "NO WAY HOME ON FOOT"}<small>${n.src === "wait" ? "Still working out the way home." : "The ground here is too steep or cut off."}</small></div>`;
+  } else {
+    const d = type === "suit" ? P.suitDrill(S.m, n) : P.hurtDrill(S.m, n);
+    h = `<div class="dt">${d.title}</div>${d.rows.map(([k, v]) => `<div class="dr"><span>${k}</span><b>${v}</b></div>`).join("")}
+      <div class="dv ${d.ok ? "ok" : "bad"}">${d.word}<small>${d.txt}</small></div><p class="dn">${d.note}${n.src === "layer" ? " Off the route, the walk home is read from the walk-home layer (4 m grid), like the app's “What if here?”." : ""}</p>`;
+  }
+  $("#drill").innerHTML = `<div class="dh"><span class="lbl">Drill · T+${P.hm(n.T)} · ${esc(where)}</span><button class="x" data-close aria-label="Close the drill">&times;</button></div>${h}<button class="ghost" data-close>Back to the walk</button>`;
+  $("#drill").hidden = false;
+  S.drill = { type, T: n.T };
+  routeLine.setHome(P.wayHome(S.m, S.field, n.pos));
+}
+function closeDrill() { if (!S.drill && $("#drill").hidden) return; S.drill = null; $("#drill").hidden = true; routeLine.setHome(null); }
+
+/* ---------- menu ---------- */
+function toggleMenu(on) { S.menuOpen = on ?? $("#menu").hidden; $("#menu").hidden = !S.menuOpen; $("#bMenu").setAttribute("aria-expanded", String(S.menuOpen)); $("#bMenu").classList.toggle("on", S.menuOpen); if (S.menuOpen) renderMenu(); }
+function renderMenu() {
+  const m = S.m, tl = m.timeline || [];
+  $("#mChecks").innerHTML = P.getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span></div>`).join("")
+    + `<div class="chk"><span class="k">The walk</span><span class="v">${m.totals.dist_km.toFixed(2)} km</span><span class="s">Home at T+${P.hm(tl[tl.length - 1].arrive_min)}; the crew must be home by T+${P.hm(m.walkback.budget_min)}. Crew of two: EV1 and EV2 walk together.</span></div>`;
+  let j = "";
+  tl.forEach((t, i) => {
+    const s = P.stopById(m, t.id), nm = P.shortName(s);
+    if (i === 0) j += `<button data-t="0"><b>T+0:00</b>Start at base camp</button>`;
+    else if (i === tl.length - 1) j += `<button data-t="${t.arrive_min}"><b>T+${P.hm(t.arrive_min)}</b>Home at base camp</button>`;
+    else j += `<button data-t="${t.arrive_min}"><b>T+${P.hm(t.arrive_min)}</b>Arrive at ${esc(nm)}</button><button data-t="${t.depart_min}"><b>T+${P.hm(t.depart_min)}</b>Leave ${esc(nm)}</button>`;
+  });
+  $("#mJumps").innerHTML = j;
+  $("#oSlope").textContent = m.assumptions.max_slope_deg;
+}
+
+function initHud() {
+  initInput();
+  $("#sFree").onclick = () => start("free");
+  $("#sPlan").onclick = () => start("plan");
+  $("#bPlan").onclick = () => {
+    closeDrill();
+    if (S.mode === "plan") { const lastT = S.m.profile[S.m.profile.length - 1].t; if (!S.playing && S.T >= lastT) jump(0, true); else S.playing = !S.playing; }
+    else { jump(0, true); toast("Back to base camp: following the plan from T+0:00."); }
+    syncButtons(); S.hudKey = "";
+  };
+  $("#bView").onclick = () => setView(S.view === "first" ? "third" : "first");
+  $("#bSpeed").onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length] || 30; syncButtons(); };
+  $("#bHurt").onclick = () => openDrill("hurt");
+  $("#bSuit").onclick = () => openDrill("suit");
+  $("#bMenu").onclick = () => toggleMenu();
+  $("#menuX").onclick = () => toggleMenu(false);
+  $("#drill").addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeDrill(); });
+  $("#mJumps").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; jump(parseFloat(b.dataset.t)); toggleMenu(false); });
+  $("#oTint").onchange = (e) => terrain.setTint(e.target.checked);
+  $("#oTenby").disabled = true;
+  $("#oTenby").onchange = (e) => setTenby(e.target.checked);
+  $("#hSite").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const F = S.free, n = S.nav;
+    if (b.dataset.act === "work" && n && n.here) F.working = { id: n.here.id, until: S.T + n.here.dwell_min };
+    else if (b.dataset.act === "stopwork") F.working = null;
+    else if (b.dataset.act === "again") { resetToStart(); S.mode = "free"; }
+    S.hudKey = "";
+  });
+  const img = new Image();
+  img.onload = () => { mini.img = img; buildMini(); };
+  img.src = "../data/hillshade.png";
+  buildMini(); renderMenu(); syncButtons();
+}
+
+/* ---------- frame loop ---------- */
+let lastT = 0, hudT = 0, frames = 0, fpsT = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - lastT) / 1000 || 0.016);
+  lastT = now;
+  update(dt);
+  renderer.render(scene, camera);
+  placeLabels();
+  if (now - hudT > 90 || S.hudKey === "") { hudT = now; S.hudKey = "ok"; if (S.started) renderHud(); }
+  frames++; if (now - fpsT > 1000) { S.fps = Math.round((frames * 1000) / (now - fpsT)); frames = 0; fpsT = now; }
+}
+
+// hooks for tests: read the helmet numbers, jump to a moment, change the view (nothing here changes the plan)
+window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
+
+boot().catch((e) => { console.error(e); $("#lMsg").textContent = "Could not load the 3D walk. Please reload the page."; });

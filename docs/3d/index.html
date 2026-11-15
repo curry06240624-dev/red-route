@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Red Route · 3D walk in Jezero Crater</title>
+<meta name="description" content="Walk the Red Route Marswalk in 3D on NASA HiRISE terrain of Jezero Crater, with the get-home numbers in the helmet display.">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="../favicon_64.png?v=2">
+<link rel="stylesheet" href="walk.css?v=4">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }</script>
+</head>
+<body class="loading first">
+<canvas id="view" aria-label="3D view of Jezero Crater, Mars"></canvas>
+<div id="visor" aria-hidden="true"></div>
+<div id="labels" aria-hidden="true"></div>
+
+<!-- ---------- helmet display ---------- -->
+<div id="hud" hidden>
+  <header class="pnl brand">
+    <img src="../logo_96.png" srcset="../logo_192.png 2x" alt="Red Route logo" width="34" height="34">
+    <div><b>RED ROUTE</b><span>3D walk · Jezero Crater</span></div>
+  </header>
+
+  <section class="pnl status" id="hStatus" aria-live="polite">
+    <div class="top"><span class="lbl" id="hMode">Free walk</span><span class="met" id="hMet">T+0:00</span></div>
+    <div class="word" id="hWord">GO</div>
+    <div class="spare" id="hSpare"></div>
+    <div class="hurt" id="hHurt"></div>
+  </section>
+
+  <section class="pnl tiles">
+    <div class="tile" id="tBack">
+      <span class="lbl">Walk home</span>
+      <b id="hBack">0 MIN</b>
+      <div class="o2bar" id="hO2bar"><i id="hO2"></i></div>
+      <small id="hO2txt"></small>
+    </div>
+    <div class="tile" id="tNext">
+      <span class="lbl" id="hNextLbl">Next stop</span>
+      <div class="next"><span class="arrow" id="hArrow" aria-hidden="true"></span><b id="hNext"></b></div>
+      <small id="hNextSub"></small>
+    </div>
+    <div class="tile" id="tLeave">
+      <span class="lbl" id="hLeaveLbl">Leave by</span>
+      <b id="hLeave"></b>
+      <small id="hLeaveSub"></small>
+    </div>
+    <div class="tile" id="tGround">
+      <span class="lbl">Slope ahead</span>
+      <b id="hSlope"></b>
+      <small id="hRoute"></small>
+    </div>
+  </section>
+
+  <div class="pnl site" id="hSite" hidden></div>
+
+  <div class="pnl mini" id="mini">
+    <canvas id="miniMap" width="440" height="188" aria-label="Small map: the route and where you are"></canvas>
+  </div>
+
+  <div class="ai-label" id="aiLabel" hidden>AI-generated 3D model (Higgsfield)</div>
+
+  <nav class="pnl bar" aria-label="Controls">
+    <button id="bPlan" title="Walk the planned route at the plan's times"><span class="tri"></span><span>Follow the plan</span></button>
+    <button id="bView" title="Switch between first person and third person (V)">Third person</button>
+    <button id="bSpeed" title="Time speed">× 30</button>
+    <button id="bHurt" class="drill">Crewmate hurt here</button>
+    <button id="bSuit" class="drill">Suit alarm here</button>
+    <button id="bMenu" aria-expanded="false">Menu</button>
+  </nav>
+
+  <div class="stick" id="stick" aria-hidden="true"><i></i></div>
+</div>
+
+<!-- ---------- drill card ---------- -->
+<div class="pnl drill-card" id="drill" role="dialog" aria-label="Bad-day drill" hidden></div>
+
+<!-- ---------- menu ---------- -->
+<aside class="pnl menu" id="menu" hidden>
+  <button class="x" id="menuX" aria-label="Close">&times;</button>
+  <div class="lbl-lg">Get-home checks</div>
+  <div id="mChecks"></div>
+  <div class="lbl-lg">Jump to a moment of the plan</div>
+  <div class="jumps" id="mJumps"></div>
+  <div class="lbl-lg">Options</div>
+  <label class="tog"><input type="checkbox" id="oTint" checked> Tint no-go ground (steeper than <span id="oSlope">15</span>°)</label>
+  <label class="tog"><input type="checkbox" id="oTenby"> Add Tenby, the optional third stop <small id="oTenbyNote"></small></label>
+  <div class="lbl-lg">Controls</div>
+  <p class="help">Laptop: <b>W A S D</b> or the arrow keys to walk, drag the mouse to look, <b>V</b> to switch view. Phone: the stick walks, drag anywhere else to look.<br>
+  The mission clock (T+) runs only while you walk or work at a stop. Walking speed is the plan's: 0.56 m/s on flat ground, slower on slopes and rough ground. The speed button makes time pass faster.</p>
+  <div class="lbl-lg">What you are looking at</div>
+  <p class="help" id="mCredits">Ground shape: HiRISE digital terrain model of Jezero Crater (NASA/JPL/University of Arizona; USGS Mars 2020 landing products), drawn at true scale with no height exaggeration on the app's 4 m grid. The colours and the fine grain are drawn by our code, not a photo. The sun's place is fixed for the picture. The base-camp habitat is a plain stand-in shape.<br>
+  Astronaut: AI-generated 3D model (Higgsfield, Meshy 6 text-to-3D), shown with a label. It carries no logos, flags or mission marks.<br>
+  3D engine: <a href="vendor/three/LICENSE" target="_blank" rel="noopener">three.js</a> r169 (MIT licence). Font: Barlow (SIL Open Font License).<br>
+  All times use the same rules and data as the <a href="../">Red Route planner</a>. This page was written with an AI coding assistant, directed by the team.</p>
+</aside>
+
+<!-- ---------- loading and start ---------- -->
+<div id="loader">
+  <div class="card">
+    <img src="../logo_96.png" srcset="../logo_192.png 2x" alt="" width="64" height="64">
+    <h1>Red Route · 3D walk</h1>
+    <p class="sub">Jezero Crater, Mars. The planned Marswalk at true scale, with the get-home numbers in your helmet.</p>
+    <div class="prog"><i id="lBar"></i></div>
+    <p class="lmsg" id="lMsg">Loading the terrain…</p>
+    <div class="starts" id="lStart" hidden>
+      <button id="sFree" class="primary">Walk it yourself</button>
+      <button id="sPlan">Follow the plan</button>
+    </div>
+    <ul class="keys">
+      <li><b>W A S D</b> walk · <b>drag</b> to look · <b>V</b> first / third person</li>
+      <li>Phone: the stick walks, drag to look</li>
+    </ul>
+    <p class="fine">Terrain: HiRISE DTM, NASA/JPL/UArizona/USGS · three.js, MIT · Astronaut: AI-generated 3D model (Higgsfield)</p>
+  </div>
+</div>
+<div id="toast" class="pnl" hidden></div>
+
+<script type="module" src="main.js?v=4"></script>
+</body>
+</html>
