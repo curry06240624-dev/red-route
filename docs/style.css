@@ -522,3 +522,5 @@ body.astro-on { overflow: hidden; }
   .tour-btns .cta, .tour-btns .ghost { min-height: 40px; }
   .tour-card .x { min-width: 40px; min-height: 32px; }
 }
+/* the map already names the deciding check; the old "Tightest" text next to it read as a second, different verdict. The ring stays (see the legend). */
+.tight-lbl { display: none; }

@@ -74,7 +74,7 @@
       const h = map.getSize().y, top = Math.max($(".brand").getBoundingClientRect().bottom, $(".topnav").getBoundingClientRect().bottom) + 10;
       map.fitBounds(b, { paddingTopLeft: [16, Math.min(top, h * 0.45)], paddingBottomRight: [136, Math.min(96, h * 0.3)] });
     }
-    else map.fitBounds(b, { paddingTopLeft: [350, 90], paddingBottomRight: [470, 170] });
+    else map.fitBounds(b, { paddingTopLeft: [350, 90], paddingBottomRight: [560, 240] });   // room for the map buttons at the bottom right
   }
 
   /* ---------- stops, numbering and names ---------- */
