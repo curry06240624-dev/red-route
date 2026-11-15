@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-15T10:12:12.899Z",
+ "generated": "2026-11-15T11:53:51.414Z",
  "engine": "red-route/docs/router.js (unchanged), app data in docs/data",
  "rules": {
   "budget_min": 216,
@@ -160,5 +160,184 @@
     0
    ]
   }
- ]
+ ],
+ "apollo_case": {
+  "factors": [
+   1.833,
+   1.073,
+   0.692,
+   1.421,
+   1.575,
+   0.935,
+   1.121,
+   0.919
+  ],
+  "source": "our sums of the Traverse rows in NASA/TP-2017-219457, Appendix A (8 Apollo moonwalks)",
+  "reserve_used_per_1000": {
+   "red_route": {
+    "reserve_used": 224,
+    "over_suit": 0
+   },
+   "red_route_maxed": {
+    "reserve_used": 256,
+    "over_suit": 0
+   },
+   "usual_rule": {
+    "reserve_used": 368,
+    "over_suit": 0
+   }
+  },
+  "by_factor": {
+   "red_route": [
+    {
+     "factor": 1.833,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 70.6,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.073,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.692,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.421,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 35.4,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.575,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 62.2,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.935,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.121,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.919,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    }
+   ],
+   "red_route_maxed": [
+    {
+     "factor": 1.833,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 72.2,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.073,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 8.1,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.692,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.421,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 42.7,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.575,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 64.4,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.935,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.121,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 13.6,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.919,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    }
+   ],
+   "usual_rule": [
+    {
+     "factor": 1.833,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 75,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.073,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 30.7,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.692,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 0,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.421,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 49.3,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.575,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 68.3,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.935,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 19.8,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 1.121,
+     "home_no_one_hurt": "reserve",
+     "reserve_used_pct": 33.3,
+     "over_suit_pct": 0
+    },
+    {
+     "factor": 0.919,
+     "home_no_one_hurt": "ok",
+     "reserve_used_pct": 18.1,
+     "over_suit_pct": 0
+    }
+   ]
+  }
+ }
 }

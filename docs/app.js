@@ -256,8 +256,12 @@
          maxed = planned with our bad-day rule, all the time that rule allows spent at the last stop (rule against rule);
          ours  = our own plan, which also keeps 14 min spare.
        The rule costs 29 min at the stops (128 - 99); our plan keeps 14 more as spare (99 - 85).
+       The "apollo" numbers are the same 1,000 walks with the slowdown drawn from NASA's Apollo records instead of our
+       assumed range: travel time between stops, performed against planned, on 8 moonwalks (0.69 to 1.83 times the plan;
+       our sums of Appendix A of NASA/TP-2017-219457; tests/apollo-traverse.test.mjs re-does the sums).
      - ENGINE4: the default walk re-planned by the browser's engine on the 4 m grid (the stored plan is from a 2 m grid). */
-  const BENEFIT = { walks: 1000, usual: 320, maxed: 111, ours: 18, usual30: 347, maxed30: 160, ours30: 59, rule_cost_min: 29, plan_spare_min: 14 };
+  const BENEFIT = { walks: 1000, usual: 320, maxed: 111, ours: 18, usual30: 347, maxed30: 160, ours30: 59, usualApollo: 368, maxedApollo: 256, oursApollo: 224, rule_cost_min: 29, plan_spare_min: 14 };
+  const APOLLO_SRC = "https://ntrs.nasa.gov/citations/20170007261";
   const ENGINE4 = { plan: 43.9, bad: 14.7, suit: 41.9 };
   /* Oxygen, for scale only (no pass or fail). 0.086 kg of oxygen per crew member per hour: NASA's planning value for a
      spacewalk at an average workload of 1.06 MJ an hour (295 W), from the Life Support Baseline Values and Assumptions
@@ -1374,8 +1378,8 @@
         `A crew slower than about ${sp(bp.bad)} m/s fails the bad-day check on this walk. The app then says to leave earlier, shorten a stop or drop one.`]);
     }
     rows.push(["Does the bad-day rule pay off?",
-      `Three plans on the same stops, in the same ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment). A plan made with the usual walk-back rule, using all the time that rule allows, needed its reserve ${BENEFIT.usual} times. A plan made with our rule, using all the time it allows: ${BENEFIT.maxed} times. Our own plan, which also keeps ${BENEFIT.plan_spare_min} min spare: ${BENEFIT.ours} times.`,
-      `The first two plans are our own constructions, and the slowdown range is assumed. Our rule costs ${BENEFIT.rule_cost_min} min at the science stops, and our plan keeps ${BENEFIT.plan_spare_min} more as spare. With walks up to 30 % slower the three numbers are ${BENEFIT.usual30}, ${BENEFIT.maxed30} and ${BENEFIT.ours30}. Nobody went past the suit limit in any run.`]);
+      `Three plans on the same stops, in the same ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment). A plan made with the usual walk-back rule, using all the time that rule allows, needed its reserve ${BENEFIT.usual} times. A plan made with our rule, using all the time it allows: ${BENEFIT.maxed} times. Our own plan, which also keeps ${BENEFIT.plan_spare_min} min spare: ${BENEFIT.ours} times. Then the same walks with the slowdown taken from NASA's Apollo records instead of our own range (travel time against plan on 8 moonwalks, from 0.69 to 1.83 times the plan; <a href="${APOLLO_SRC}" target="_blank" rel="noopener">NASA/TP-2017-219457</a>): ${BENEFIT.usualApollo}, ${BENEFIT.maxedApollo} and ${BENEFIT.oursApollo} times.`,
+      `The first two plans are our own constructions, and the 0 to 20 % range is our assumption (up to 30 % slower: ${BENEFIT.usual30}, ${BENEFIT.maxed30} and ${BENEFIT.ours30}). The Apollo spread is harsher: 3 of the 8 moonwalks took 1.4 to 1.8 times the planned travel time, and with it even our plan needs its reserve in about one walk in five. It is the Moon, mostly rover drives and only 8 moonwalks; the ratios are our sums of the report's tables. Our rule costs ${BENEFIT.rule_cost_min} min at the science stops, and our plan keeps ${BENEFIT.plan_spare_min} more as spare. Nobody went past the suit limit in any run.`]);
     if (window.StormReplay) {
       const SR = window.StormReplay, warn = Math.floor(SR.alarmToPeakMin), need = Math.ceil(wb.suit.worst.back - 1e-9) + GET_INSIDE_MIN, w = SR.walkHome(need);
       rows.push(["What would a real solar storm do to this walk?",
@@ -1393,7 +1397,7 @@
       `No. Within ${sc.radius_m} m of it the ground reaches ${sc.slope_max}°. NASA's Artemis III EVA study draws a 100 m landing circle with slopes under 5°.`,
       "Failed, and we say so. Base camp was placed on top of the delta so that the loop fits the time rules."]);
     rows.push(["Are the numbers re-checked?",
-      "87 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method, the 1,000-walk simulation and the storm replay (node --test).",
+      "90 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method, the 1,000-walk simulation with its Apollo case and the storm replay (node --test).",
       "They test the numbers and the route engine, not the screens. The screens were checked in a browser by an AI reviewer, on a desktop size and a phone size."]);
     return `<h3 id="how-checked">What we checked, and what failed</h3>
       <table class="chk-tbl"><tr><th>We asked</th><th>We checked</th><th>Limit, or what failed</th></tr>

@@ -135,6 +135,39 @@ function hidden(res, maxSlow) {
 result.sensitivity_reserve_used_per_1000 = [0, 0.1, 0.2, 0.3].map((x) => ({
   slowdown: x ? `0-${x * 100} %` : "none", red_route: hidden(red, x), red_route_maxed: hidden(redMax, x), usual_rule: hidden(usual, x), over_suit: [red, redMax, usual].map((p) => overOnly(p, x)) }));
 function overOnly(res, maxSlow) { const S = series(res), r = rng(20261115); let o = 0; for (let i = 0; i < 1000; i++) { const s = 1 + maxSlow * r(); const tau = r() * endTime(S, s); if (classify(tau + BF * backAt(S, s, tau)) === "over") o++; } return o; }
+// Apollo case: the slowdown is not assumed but drawn from NASA's Apollo records.
+// Actual / planned minutes spent moving between stops, one value per moonwalk, in this order: Apollo 14 EVA 1 and 2,
+// Apollo 15 EVA 1, Apollo 16 EVA 1 and 2, Apollo 17 EVA 1, 2 and 3. They are our own sums of the "Traverse" rows of
+// Appendix A (Tables A32-A37, A42-A45, A48-A53) of NASA/TP-2017-219457, Miller et al., "Operational Assessment of
+// Apollo Lunar Surface Extravehicular Activity" (2017), https://ntrs.nasa.gov/citations/20170007261.
+// validation/apollo_traverse/ holds the rows and tests/apollo-traverse.test.mjs re-does the sums.
+// What it is not: Mars (this is the Moon, 1/6 g); all walking (6 of the 8 moonwalks drove a rover between stops);
+// a big sample (8 values). Apollo crews also cut stops to stay on time; here the stop time stays fixed.
+const APOLLO_WALK_FACTOR = [1.833, 1.073, 0.692, 1.421, 1.575, 0.935, 1.121, 0.919];
+function hiddenApollo(res) {
+  const S = series(res), r = rng(20261115), w = { ok: 0, reserve: 0, over: 0 };
+  for (let i = 0; i < 1000; i++) {
+    const s = APOLLO_WALK_FACTOR[Math.floor(r() * APOLLO_WALK_FACTOR.length)];
+    const tau = r() * endTime(S, s);
+    w[classify(tau + BF * backAt(S, s, tau))]++;
+  }
+  return { reserve_used: w.reserve + w.over, over_suit: w.over };
+}
+// the same thing without chance: for each Apollo factor, the share of the walk's moments at which a hurt crewmate
+// would not be home with the reserve untouched
+function apolloByFactor(res) {
+  const S = series(res);
+  return APOLLO_WALK_FACTOR.map((s) => {
+    const end = endTime(S, s); let bad = 0, n = 0, over = 0;
+    for (let tau = 0; tau <= end + 1e-9; tau += 0.1) { const c = classify(tau + BF * backAt(S, s, tau)); n++; if (c !== "ok") bad++; if (c === "over") over++; }
+    return { factor: s, home_no_one_hurt: classify(end), reserve_used_pct: +(100 * bad / n).toFixed(1), over_suit_pct: +(100 * over / n).toFixed(1) };
+  });
+}
+result.apollo_case = {
+  factors: APOLLO_WALK_FACTOR, source: "our sums of the Traverse rows in NASA/TP-2017-219457, Appendix A (8 Apollo moonwalks)",
+  reserve_used_per_1000: { red_route: hiddenApollo(red), red_route_maxed: hiddenApollo(redMax), usual_rule: hiddenApollo(usual) },
+  by_factor: { red_route: apolloByFactor(red), red_route_maxed: apolloByFactor(redMax), usual_rule: apolloByFactor(usual) },
+};
 const text = JSON.stringify(result, null, 1);
 if (outPath) fs.writeFileSync(outPath, text);
 console.log(text);

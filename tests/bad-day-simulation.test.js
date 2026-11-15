@@ -41,11 +41,19 @@ test("stop minutes: our plan 85, our rule with all spare spent 99, usual rule 12
   assert.deepStrictEqual([stops("RED ROUTE (bad-day rule)"), stops("RED ROUTE MAXED"), stops("USUAL")], [85, 99, 128]);
 });
 
+test("Apollo case (slowdown drawn from 8 Apollo moonwalks): usual rule 368, our rule with all spare spent 256, our plan 224, nobody over the suit limit", () => {
+  const ap = sim.apollo_case.reserve_used_per_1000;
+  assert.deepStrictEqual([ap.usual_rule.reserve_used, ap.red_route_maxed.reserve_used, ap.red_route.reserve_used], [368, 256, 224]);
+  assert.deepStrictEqual([ap.usual_rule.over_suit, ap.red_route_maxed.over_suit, ap.red_route.over_suit], [0, 0, 0]);
+  for (const k of ["usual_rule", "red_route_maxed", "red_route"]) assert.ok(sim.apollo_case.by_factor[k].every((f) => f.over_suit_pct === 0));
+});
+
 test("the numbers written in docs/app.js are the simulation's numbers", () => {
   const src = fs.readFileSync(path.join(ROOT, "docs", "app.js"), "utf8");
   const m = /const BENEFIT = \{([^}]*)\}/.exec(src);
   assert.ok(m, "BENEFIT constant not found in docs/app.js");
   const got = Object.fromEntries(m[1].split(",").map((kv) => kv.split(":").map((x) => x.trim())).map(([k, v]) => [k, Number(v)]));
-  const a = row("0-20 %"), b = row("0-30 %");
-  assert.deepStrictEqual(got, { walks: 1000, usual: a.usual_rule, maxed: a.red_route_maxed, ours: a.red_route, usual30: b.usual_rule, maxed30: b.red_route_maxed, ours30: b.red_route, rule_cost_min: 29, plan_spare_min: 14 });
+  const a = row("0-20 %"), b = row("0-30 %"), ap = sim.apollo_case.reserve_used_per_1000;
+  assert.deepStrictEqual(got, { walks: 1000, usual: a.usual_rule, maxed: a.red_route_maxed, ours: a.red_route, usual30: b.usual_rule, maxed30: b.red_route_maxed, ours30: b.red_route,
+    usualApollo: ap.usual_rule.reserve_used, maxedApollo: ap.red_route_maxed.reserve_used, oursApollo: ap.red_route.reserve_used, rule_cost_min: 29, plan_spare_min: 14 });
 });
