@@ -763,6 +763,7 @@
      on the planned walk. Nothing in the plan is changed. The storm warning time is a what-if the user picks. */
   const DRILLS = [["hurt", "Crewmate hurt here"], ["suit", "Suit alarm here"], ["storm", "Storm warning now"], ["late", "Running late +10 min"]];
   const LATE_MAX = 120;   // the delay drill stops adding here
+  const GET_INSIDE_MIN = 10;   // minutes to get inside once the crew is back at base camp: the allowance in the suit-failure rule (1 h of backup oxygen = 50 min of walking + this)
   const drillBtns = () => DRILLS.map(([k, t]) => `<button data-drill="${k}">${t}</button>`).join("");
   const drill = { type: null, warn: 30, late: 0, line: null, T: null };
   const drillEl = el("div", "pnl drill-card");
@@ -871,13 +872,15 @@
     } else if (drill.type === "suit") {
       title = "Suit alarm";
       body = row("Walk home from here", fmtMin(backR)) + row("Backup oxygen for the walk", `${n.lim} min`) + verdict(n.back <= n.lim, spareTxt(n.lim - backR, "of backup oxygen to spare"));
-      note = 'Same rule as the "Suit failure" check: 1 h of backup oxygen, about 10 min of it to get inside.';
+      note = `Same rule as the "Suit failure" check: 1 h of backup oxygen, about ${GET_INSIDE_MIN} min of it to get inside.`;
     } else if (drill.type === "storm") {
-      const spare = drill.warn - backR, dose = walkDoseUGy(m);
+      // rounded toward the unsafe side: the walk home is rounded up, so a spare is rounded down and a shortfall up
+      const backUp = Math.ceil(n.back - 1e-9), need = backUp + GET_INSIDE_MIN, spare = drill.warn - need, dose = walkDoseUGy(m);
       title = "Storm warning";
-      body = `<div class="dr"><span>Warning time (what-if, you pick)${stag("a", "drillHow")}</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
-        + row("Walk home from here", fmtMin(backR)) + verdict(n.back <= drill.warn, spare >= 0 ? `inside ${fmtMin(spare)} before the warning time runs out` : `${fmtMin(spare)} short of shelter`);
-      note = `A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024. That is about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times the quiet-day dose of this whole walk (see Radiation under Conditions).`;
+      body = row("Walk home from here", fmtMin(backUp)) + row("Get inside (same as the suit check)", `${GET_INSIDE_MIN} min`)
+        + `<div class="dr"><span>Warning time (what-if, you pick)${stag("a", "drillHow")}</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
+        + verdict(spare >= 0, spare >= 0 ? `inside with ${fmtMin(spare)} to spare` : `${fmtMin(spare)} short of shelter`);
+      note = `${spare >= 0 ? "" : `With a ${drill.warn}-min warning the crew would have to stay within ${drill.warn - GET_INSIDE_MIN} min of walking from base. `}A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024. That is about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times the quiet-day dose of this whole walk (see Radiation under Conditions).`;
     } else {
       const D = drill.late, P = m.profile, tl = m.timeline || [], lastT = P[P.length - 1].t;
       let wPlan = Infinity, wBad = Infinity;   // the tightest moments from now on, with the delay added
@@ -1324,7 +1327,7 @@
         <tr><td>Radiation dose rate</td><td>${RAD.gale_mgy_day} mGy a day (quiet Sun, Gale Crater)</td><td>Curiosity's RAD, average over about 300 sols (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). The May 2024 storm value, about ${RAD.storm_ugy.toLocaleString("en-US")} microgray, is from <a href="${RAD.storm}" target="_blank" rel="noopener">NASA/JPL</a>. For scale only: the app does not check a dose limit.</td></tr></table>
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
-      <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast.</p>
+      <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast. The storm drill counts the walk home plus about ${GET_INSIDE_MIN} min to get inside, the same allowance as the suit check.</p>
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} waypoint records inside our area (a few spots were logged more than once) our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}
