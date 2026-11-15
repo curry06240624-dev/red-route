@@ -6,12 +6,12 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=10";
-import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=10";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=10";
-import { makeFx } from "./fx.js?v=10";
-import { Rocks, Footprints, Dust } from "./props.js?v=10";
-import { Sound } from "./sound.js?v=10";
+import * as P from "./plan.js?v=11";
+import { Ground, buildTerrain, buildFar, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=11";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=11";
+import { makeFx } from "./fx.js?v=11";
+import { Rocks, Footprints, Dust } from "./props.js?v=11";
+import { Sound } from "./sound.js?v=11";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -303,6 +303,9 @@ function initInput() {
     else if (e.code === "KeyC") setView(S.view === "cine" ? "third" : "cine");
     else if (e.code === "Space") { e.preventDefault(); $("#bPlan").click(); }
     else if (e.code === "Escape") { closeDrill(); toggleMenu(false); }
+    else if (/^Digit[1-5]$/.test(e.code)) { S.speed = SPEEDS[+e.code.slice(5) - 1]; S.speedBefore = 0; syncButtons(); }
+    else if (e.code === "KeyM") toggleMenu();
+    else if (e.code === "KeyH") openDrill("hurt");
   });
   window.addEventListener("keyup", (e) => keys.delete(e.code));
   window.addEventListener("blur", () => keys.clear());
@@ -579,6 +582,7 @@ function renderHud() {
     put("hNext", esc(P.shortName(n.nextS).toUpperCase()));
     put("hNextSub", onLeg ? `${km(n.along)} along the route · ${P.compass(brg)}` : `${km(n.dist)} in a straight line · ${P.compass(brg)}`);
   }
+  S.hudBrg = brg;
   $("#hArrow").style.display = brg == null ? "none" : "";
   if (brg != null) $("#hArrow").style.transform = `rotate(${(brg - camYaw).toFixed(1)}deg)`;
   // leave-by
@@ -607,7 +611,101 @@ function renderHud() {
   else if (S.mode === "plan" && n.here) sh = `<span>On site at ${esc(P.shortName(n.here))}. The plan leaves at T+${P.hm(tl[n.hereIdx].depart_min)}.</span>`;
   if (cache.get("site") !== sh) { cache.set("site", sh); site.innerHTML = sh; site.hidden = !sh; }
   drawMini(n);
+  renderHelm(n, v);
   if (S.drill && Math.abs(S.T - S.drill.T) > 0.02) closeDrill();
+}
+
+/* ---------- the helmet display: the same numbers, floating on the visor ---------- */
+const txt = (id) => document.getElementById(id).textContent;
+function setBar(id, frac, cls) {
+  const el = document.getElementById(id), w = `${Math.max(0, Math.min(1, frac)) * 100}%`, key = `${w}|${cls}`;
+  if (cache.get(id) === key) return;
+  cache.set(id, key); el.style.width = w; el.parentNode.className = `h-bar ${cls}${id === "xSlopeBar" ? " slope" : ""}`;
+}
+function renderHelm(n, v) {
+  const m = S.m, wb = m.walkback, tl = m.timeline || [], a = m.assumptions, last = m.order.length - 1;
+  const known = n.src !== "none" && n.src !== "wait", Bb = wb.bad ? wb.bad.budget_min : wb.budget_min;
+  put("xMet", `T+${P.hm(S.T)}`);
+  put("xHomeBy", `T+${P.hm(wb.budget_min)}`);
+  put("xSpare", known ? `${n.mPlan < 0 ? "−" : ""}${P.fmtMin(n.mPlan)}` : "–", `big ${!known ? "" : n.mPlan < 0 ? "bad" : n.mPlan < 30 ? "warn" : "ok"}`);
+  setBar("xSpareBar", known ? n.mPlan / wb.budget_min : 0, n.mPlan < 0 ? "bad" : n.mPlan < 30 ? "warn" : "");
+  put("xBad", known ? `${P.fmtMin(n.mBad)} ${n.mBad < 0 ? "short" : "to spare"}` : "–", known && n.mBad < 0 ? "bad" : "");
+  setBar("xBadBar", known ? n.mBad / Bb : 0, n.mBad < 0 ? "bad" : n.mBad < 15 ? "warn" : "");
+  put("xBack", known ? `${Math.round(n.back)} min` : "–", known && n.back > n.lim ? "bad" : "");
+  setBar("xBackBar", known ? n.back / n.lim : 0, known && n.back > n.lim ? "bad" : known && n.back > n.lim * 0.8 ? "warn" : "");
+  put("xBackNote", n.src === "none" ? "no way home on foot from here" : known && n.back > n.lim ? `beyond the ${n.lim} min of backup oxygen` : `of ${n.lim} min of backup oxygen`, known && n.back > n.lim ? "bad" : "");
+  put("xMode", `${S.mode === "plan" ? (S.playing ? "Following the plan" : "On the plan · paused") : S.free.working ? "Working at the stop" : "Free walk"} · ×${S.speed}`.toUpperCase());
+  // next stop
+  const idx = n.after ? last : n.here ? Math.min(last, n.hereIdx + 1) : n.leg + 1, onLeg = n.along != null, brg = S.hudBrg;
+  put("xNextLbl", n.after ? "Status" : `${txt("hNextLbl")} · ${idx === last ? "H" : idx + 1}`);
+  put("xNext", esc(txt("hNext")));
+  put("xDist", n.after ? "HOME" : km(onLeg ? n.along : n.dist));
+  let eta = null;
+  if (!n.after && onLeg && tl[n.leg + 1]) {
+    const at = S.mode === "plan" ? S.T : n.d != null ? P.profileAt(m, n.leg, n.d).t : null;
+    if (at != null) eta = Math.max(0, tl[n.leg + 1].arrive_min - Math.max(at, tl[n.leg] ? tl[n.leg].depart_min : 0));
+  }
+  put("xNextSub", n.after ? "Crew is back inside" : `${onLeg ? "along the route" : "in a straight line"}${brg != null ? ` · ${P.compass(brg)}` : ""}${eta != null ? ` · ${P.fmtMin(eta)} at plan pace` : ""}`);
+  const ar = $("#xArrow"); ar.style.display = brg == null ? "none" : ""; if (brg != null) ar.style.transform = `rotate(${(brg - S.yaw).toFixed(1)}deg)`;
+  put("xLeaveLbl", esc(txt("hLeaveLbl"))); put("xLeave", esc(txt("hLeave")), $("#hLeave").className); put("xLeaveSub", esc(txt("hLeaveSub")), $("#hLeaveSub").className);
+  // the ground
+  const hd = (S.mode === "plan" ? S.heading : S.yaw) * DEG, sA = G.slopeAt(S.pos.x + Math.sin(hd) * 6, S.pos.z - Math.cos(hd) * 6), lim = a.max_slope_deg;
+  put("xSlope", sA == null ? "–" : `${sA.toFixed(1)}°${sA > lim ? " · NO-GO" : ""}`, sA != null && sA > lim ? "bad" : "");
+  setBar("xSlopeBar", sA == null ? 0 : sA / (lim / 0.6), sA != null && sA > lim ? "bad" : sA != null && sA > lim - 3 ? "warn" : "");
+  put("xPace", `${(S.moving > 0.05 && !n.after ? walkSpeed(S.pos.x, S.pos.z) * Math.min(1, S.moving) : 0).toFixed(2)} m/s`);
+  put("xElev", `${Math.round(G.height(S.pos.x, S.pos.z) + G.Y0).toLocaleString("en-US").replace("-", "−")} m`);
+  const here = G.slopeAt(S.pos.x, S.pos.z), rough = G.roughAt(S.pos.x, S.pos.z) > a.rough_m;
+  put("xGround", here != null && here > lim ? "NO-GO SLOPE" : rough ? `ROUGH · ${a.rough_penalty}× SLOWER` : "FIRM", here != null && here > lim ? "sm bad" : rough ? "sm warn" : "sm");
+  put("xRoute", esc(txt("hRoute")), $("#hRoute").className);
+  // the word
+  $("#xStatus").className = `h-status ${n.src === "wait" ? "" : v.cls}`;
+  put("xWord", n.src === "wait" ? "…" : v.word);
+  put("xLine", n.src === "wait" ? "Working out the way home…" : n.after || !known ? esc(v.spare) : `${esc(v.spare)} · if EV2 is hurt: ${P.fmtMin(n.mBad)} ${n.mBad < 0 ? "short" : "to spare"}`);
+  // the stops in order, with the plan's arrival times
+  let sh = "";
+  m.order.forEach((id, i) => {
+    const st = P.stopById(m, id), nm = i === last ? "Home" : P.shortName(st), done = n.after || i < (n.here ? n.hereIdx : n.leg + 1), on = !n.after && i === (n.here ? n.hereIdx : n.leg + 1);
+    sh += `<span class="${on ? "on" : done ? "done" : ""}"><i>${i === last ? "H" : i + 1}</i>${esc(nm)}${i > 0 && tl[i] ? `<em>T+${P.hm(tl[i].arrive_min)}</em>` : ""}</span>`;
+  });
+  put("xStops", sh);
+}
+
+// the compass tape at the top: where the camera looks, with the stops at their bearings
+const CARD = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+function drawTape() {
+  const cv = $("#hTape");
+  if (!S.started || S.view === "cine" || !cv.offsetParent) return;
+  const ctx = cv.getContext("2d"), W = cv.width, H = cv.height, span = 112, ppd = W / span, yaw = ((S.yaw % 360) + 360) % 360, bend = 46 / ((W / 2) * (W / 2));
+  ctx.clearRect(0, 0, W, H);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6;
+  const yAt = (dx) => 46 + bend * dx * dx;
+  for (let a = Math.ceil((yaw - span / 2) / 5) * 5; a <= yaw + span / 2; a += 5) {
+    const dx = (a - yaw) * ppd, x = W / 2 + dx, y = yAt(dx), deg = ((a % 360) + 360) % 360, fade = 1 - Math.pow(Math.abs(dx) / (W / 2), 3);
+    const card = CARD[deg], mid = deg % 15 === 0;
+    ctx.globalAlpha = Math.max(0, fade) * (card ? 1 : mid ? 0.8 : 0.5);
+    ctx.fillStyle = "#fff"; ctx.fillRect(x - (card ? 1.5 : 1), y + 16, card ? 3 : 2, card ? 22 : mid ? 14 : 8);
+    if (card) { ctx.font = "600 34px 'Barlow Semi Condensed', Barlow, sans-serif"; ctx.fillText(card, x, y - 6); }
+    else if (mid) { ctx.font = "500 20px 'Barlow Semi Condensed', Barlow, sans-serif"; ctx.fillStyle = "rgba(255,244,232,.85)"; ctx.fillText(String(deg), x, y - 2); }
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.moveTo(W / 2 - 11, 4); ctx.lineTo(W / 2 + 11, 4); ctx.lineTo(W / 2, 20); ctx.closePath(); ctx.fill();
+  // the stops
+  const m = S.m, ll = [G.latOf(S.pos.z), G.lonOf(S.pos.x)], n = S.nav, nextId = n && !n.after ? (n.here ? n.here.id : n.nextS.id) : "";
+  const seen = new Set();
+  m.order.forEach((id, i) => {
+    if (seen.has(id)) return; seen.add(id);
+    const st = P.stopById(m, id);
+    if (P.metres(ll, [st.lat, st.lon]) < 4) return;
+    let rel = ((P.bearing(ll, [st.lat, st.lon]) - yaw + 540) % 360) - 180;
+    const out = Math.abs(rel) > span / 2 - 4; rel = Math.max(-span / 2 + 4, Math.min(span / 2 - 4, rel));
+    const dx = rel * ppd, x = W / 2 + dx, y = yAt(dx) + 62, big = id === nextId, r = big ? 19 : 15;
+    ctx.globalAlpha = out ? 0.45 : 1;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fillStyle = id === "base" ? "#fff" : "#ff6a3d"; ctx.fill();
+    if (big) { ctx.lineWidth = 3; ctx.strokeStyle = "#fff"; ctx.stroke(); }
+    ctx.fillStyle = id === "base" ? "#101214" : "#fff"; ctx.shadowBlur = 0; ctx.font = `700 ${big ? 22 : 18}px 'Barlow Semi Condensed', Barlow, sans-serif`;
+    ctx.fillText(id === "base" ? "H" : String(i + 1), x, y + 1); ctx.shadowBlur = 6;
+  });
+  ctx.globalAlpha = 1;
 }
 
 /* ---------- small map ---------- */
@@ -751,6 +849,7 @@ function frame(now) {
   update(dt);
   if (fx && !S.lite) { sunOnLens(dt); fx.render(dt); } else renderer.render(scene, camera);
   placeLabels();
+  drawTape();
   if (now - hudT > 90 || S.hudKey === "") { hudT = now; S.hudKey = "ok"; if (S.started) renderHud(); }
   frames++;
   if (now - fpsT > 1000) {

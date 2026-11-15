@@ -8,7 +8,7 @@
 <meta name="description" content="Walk the Red Route Marswalk in 3D on NASA HiRISE terrain of Jezero Crater, with the get-home numbers in the helmet display.">
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/png" href="../favicon_64.png?v=2">
-<link rel="stylesheet" href="walk.css?v=10">
+<link rel="stylesheet" href="walk.css?v=11">
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body class="loading first">
@@ -56,6 +56,51 @@
     </div>
   </section>
 
+  <!-- the helmet display: numbers float on the visor, no boxes -->
+  <div id="helm">
+    <svg class="h-frame" viewBox="0 0 1000 562" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M 40 178 Q 500 -62 960 178" /><path d="M 150 520 Q 500 600 850 520" />
+    </svg>
+    <canvas id="hTape" width="1500" height="150" aria-label="Compass: where you look, and where the stops are"></canvas>
+    <div class="h-stops" id="xStops"></div>
+    <div class="h-side h-left">
+      <div class="h-row"><span class="k">Mission time</span><b class="big" id="xMet">T+0:00</b></div>
+      <div class="h-row opt"><span class="k">Home by</span><b id="xHomeBy"></b></div>
+      <hr>
+      <div class="h-row"><span class="k">Time to spare</span><b class="big ok" id="xSpare"></b></div>
+      <div class="h-bar"><i id="xSpareBar"></i></div>
+      <div class="h-row stack"><span class="k">If EV2 is hurt and EV1 helps</span><b id="xBad"></b></div>
+      <div class="h-bar"><i id="xBadBar"></i></div>
+      <small class="opt">walk home at half speed · reserve untouched</small>
+      <div class="h-row gap"><span class="k">Walk home</span><b id="xBack"></b></div>
+      <div class="h-bar"><i id="xBackBar"></i></div>
+      <small id="xBackNote"></small>
+      <hr class="opt">
+      <div class="h-row opt"><span class="k">Mode</span><b class="sm" id="xMode"></b></div>
+    </div>
+    <div class="h-side h-right">
+      <div class="k" id="xNextLbl">Next stop</div>
+      <b class="name" id="xNext"></b>
+      <div class="h-dist"><span class="arrow" id="xArrow" aria-hidden="true"></span><b class="huge" id="xDist"></b></div>
+      <small id="xNextSub"></small>
+      <hr>
+      <div class="h-row"><span class="k" id="xLeaveLbl">Leave by</span><b id="xLeave"></b></div>
+      <small id="xLeaveSub"></small>
+      <div class="h-row gap"><span class="k">Slope ahead</span><b id="xSlope"></b></div>
+      <div class="h-bar slope"><i id="xSlopeBar"></i><u></u></div>
+      <div class="h-row opt"><span class="k">Pace</span><b class="sm" id="xPace"></b></div>
+      <div class="h-row opt"><span class="k">Elevation</span><b class="sm" id="xElev"></b></div>
+      <div class="h-row opt"><span class="k">Ground</span><b class="sm" id="xGround"></b></div>
+      <small id="xRoute"></small>
+    </div>
+    <div class="h-status" id="xStatus">
+      <svg viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true"><path d="M 6 54 Q 300 -34 594 54" /></svg>
+      <div class="word" id="xWord">GO</div>
+      <div class="line" id="xLine"></div>
+    </div>
+    <div class="h-cross" aria-hidden="true"></div>
+  </div>
+
   <div class="pnl site" id="hSite" hidden></div>
 
   <div class="pnl mini" id="mini">
@@ -65,13 +110,13 @@
   <div class="ai-label" id="aiLabel" hidden>AI-generated 3D model (Higgsfield)</div>
 
   <nav class="pnl bar" aria-label="Controls">
-    <button id="bPlan" title="Walk the planned route at the plan's times"><span class="tri"></span><span>Follow the plan</span></button>
+    <button id="bPlan" title="Walk the planned route at the plan's times (Space)"><span class="tri"></span><span>Follow the plan</span></button>
     <button id="bView" title="Switch between first person and third person (V)">Third person</button>
-    <button id="bSpeed" title="Time speed">× 30</button>
-    <button id="bHurt" class="drill">Crewmate hurt here</button>
+    <button id="bSpeed" title="Time speed (keys 1 to 5)">× 30</button>
+    <button id="bHurt" class="drill" title="Drill: what if a crewmate is hurt right here (H)">Crewmate hurt here</button>
     <button id="bSuit" class="drill">Suit alarm here</button>
     <button id="bSound" title="Sound made by code: wind, steps and alert tones">Sound on</button>
-    <button id="bMenu" aria-expanded="false">Menu</button>
+    <button id="bMenu" aria-expanded="false" title="Checks, jumps, options, credits (M)">Menu</button>
   </nav>
 
   <div class="credit">Terrain and ground picture: HiRISE, NASA/JPL/UArizona/USGS<br>True scale · three.js (MIT) · more in the menu</div>
@@ -93,7 +138,7 @@
   <label class="tog"><input type="checkbox" id="oTint" checked> Tint no-go ground (steeper than <span id="oSlope">15</span>°)</label>
   <label class="tog"><input type="checkbox" id="oTenby"> Add Tenby, the optional third stop <small id="oTenbyNote"></small></label>
   <div class="lbl-lg">Controls</div>
-  <p class="help">Laptop: <b>W A S D</b> or the arrow keys to walk, drag the mouse to look, <b>V</b> to switch view (first person, third person, cinema camera). Phone: the stick walks, drag anywhere else to look.<br>
+  <p class="help">Laptop: <b>W A S D</b> or the arrow keys to walk, drag the mouse to look, <b>V</b> to switch view (first person, third person, cinema camera), <b>C</b> cinema camera, <b>Space</b> follow or pause the plan, <b>1</b> to <b>5</b> time speed, <b>H</b> crewmate-hurt drill, <b>M</b> menu. Phone: the stick walks, drag anywhere else to look.<br>
   The mission clock (T+) runs only while you walk or work at a stop. Walking speed is the plan's: 0.56 m/s on flat ground, slower on slopes and rough ground. The speed button makes time pass faster.</p>
   <div class="lbl-lg">What you are looking at</div>
   <p class="help" id="mCredits">Ground shape: HiRISE digital terrain model of Jezero Crater (NASA/JPL/University of Arizona; USGS Mars 2020 landing products), drawn at true scale with no height exaggeration on the 4 m grid of the planner.<br>
@@ -126,6 +171,6 @@
 </div>
 <div id="toast" class="pnl" hidden></div>
 
-<script type="module" src="main.js?v=10"></script>
+<script type="module" src="main.js?v=11"></script>
 </body>
 </html>
