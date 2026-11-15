@@ -1,0 +1,117 @@
+{
+ "generated": "2026-11-15T07:55:26.639Z",
+ "engine": "red-route/docs/router.js (unchanged), app data in docs/data",
+ "rules": {
+  "budget_min": 216,
+  "suit_limit_outside_min": 360,
+  "half_speed_factor": 2,
+  "slowdown_range": "0-20 % (assumed)",
+  "seed": 20261115,
+  "usual_plan": "same stops, +43 min at gap"
+ },
+ "reproduced_app_numbers": {
+  "engine_4m": {
+   "plan_fits": 43.9,
+   "bad_day": 14.7,
+   "suit_worst": 41.9
+  },
+  "published_2m": {
+   "plan_fits": 43.2,
+   "bad_day": 13.8,
+   "suit_worst": 42.4
+  }
+ },
+ "plans": [
+  {
+   "plan": "RED ROUTE (bad-day rule)",
+   "order": "base > depot > gap > base",
+   "dist_km": 2.34,
+   "time_outside_min": 172.1,
+   "stop_minutes": 85,
+   "usual_rule_margin_min": 43.9,
+   "bad_day_margin_min": 14.7,
+   "suit_worst_walk_home_min": 41.9,
+   "good_day": "ok",
+   "hurt_every_moment": {
+    "moments": 1722,
+    "reserve_untouched_pct": 100,
+    "reserve_used_pct": 0,
+    "over_suit_limit_pct": 0,
+    "latest_home_min": 201.3
+   },
+   "hidden_problems_1000_walks": {
+    "reserve_untouched": 982,
+    "reserve_used": 18,
+    "over_suit_limit": 0
+   }
+  },
+  {
+   "plan": "USUAL (normal-pace walk-back rule only)",
+   "order": "base > depot > gap > base",
+   "dist_km": 2.34,
+   "time_outside_min": 215.1,
+   "stop_minutes": 128,
+   "usual_rule_margin_min": 0.9,
+   "bad_day_margin_min": -28.3,
+   "suit_worst_walk_home_min": 41.9,
+   "good_day": "ok",
+   "hurt_every_moment": {
+    "moments": 2152,
+    "reserve_untouched_pct": 73.7,
+    "reserve_used_pct": 26.3,
+    "over_suit_limit_pct": 0,
+    "latest_home_min": 244.3
+   },
+   "hidden_problems_1000_walks": {
+    "reserve_untouched": 680,
+    "reserve_used": 320,
+    "over_suit_limit": 0
+   }
+  },
+  {
+   "plan": "FIRST (our first plan, 4 stops)",
+   "order": "base > depot > gap > top > base",
+   "dist_km": 4.07,
+   "time_outside_min": 272.6,
+   "stop_minutes": 115,
+   "usual_rule_margin_min": -56.6,
+   "bad_day_margin_min": -94.8,
+   "suit_worst_walk_home_min": 41.9,
+   "good_day": "reserve",
+   "hurt_every_moment": {
+    "moments": 2727,
+    "reserve_untouched_pct": 65.9,
+    "reserve_used_pct": 34.1,
+    "over_suit_limit_pct": 0,
+    "latest_home_min": 310.8
+   },
+   "hidden_problems_1000_walks": {
+    "reserve_untouched": 591,
+    "reserve_used": 409,
+    "over_suit_limit": 0
+   }
+  }
+ ],
+ "sensitivity_reserve_used_per_1000": [
+  {
+   "slowdown": "none",
+   "red_route": 0,
+   "usual_rule": 270
+  },
+  {
+   "slowdown": "0-10 %",
+   "red_route": 0,
+   "usual_rule": 294
+  },
+  {
+   "slowdown": "0-20 %",
+   "red_route": 18,
+   "usual_rule": 320
+  },
+  {
+   "slowdown": "0-30 %",
+   "red_route": 59,
+   "usual_rule": 347
+  }
+ ]
+}

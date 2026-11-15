@@ -397,3 +397,5 @@ body.astro-on { overflow: hidden; }
 .drill-card .dbtns button[disabled] { opacity: .4; cursor: default; }
 .drill-card .lbl .stag { vertical-align: 0; }
 @media (max-width: 900px) { .drawer { z-index: 1200; } }
+.chk-tbl td:first-child { width: 22%; font-weight: 600; color: var(--text); }
+.chk-tbl td:nth-child(3) { color: #fcd9a8; }

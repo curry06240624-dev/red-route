@@ -242,6 +242,13 @@
      - 8,100 micrograys: what RAD measured in the solar storm of 20 May 2024 (NASA/JPL news release, 10 June 2024). */
   const RAD = { gale_mgy_day: 0.21, storm_ugy: 8100,
     paper: "https://doi.org/10.1126/science.1244797", storm: "https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/" };
+  /* Results of two checks that are run outside the browser and re-checked by the tests:
+     - BENEFIT: validation/benefit_test.mjs (seed 20261115). 1,000 simulated walks, each up to 20 % slower than planned
+       with a crewmate hurt at a random moment; "usual" is the same stops planned with the normal-pace walk-back rule
+       only, its spare 43 min spent at the last stop. Counted: walks that had to use the reserve.
+     - ENGINE4: the default walk re-planned by the browser's engine on the 4 m grid (the stored plan is from a 2 m grid). */
+  const BENEFIT = { walks: 1000, usual: 320, ours: 18, usual30: 347, ours30: 59, price_min: 43 };
+  const ENGINE4 = { plan: 43.9, bad: 14.7, suit: 41.9 };
   const walkDoseUGy = (m) => RAD.gale_mgy_day * 1000 * ((m.totals.eva_h * 60) / 1440);   // quiet-day dose for the time outside
 
   function renderConditions() {
@@ -1298,6 +1305,45 @@
     return `<svg viewBox="0 0 ${W} ${H + 6}" width="100%" style="max-width:420px" role="img" aria-label="Slope map versus rover tilt">${g}</svg>`;
   }
 
+  // "What we checked, and what failed": every claim next to its limit. Numbers are read from the plan data
+  // (rover_check, validation, walkback) or from the two constants above; nothing is typed in by hand twice.
+  function checkedHtml(m) {
+    const rc = m.rover_check, v = m.validation, wb = m.walkback, a = m.assumptions, bp = breakingPoints(m);
+    const base = m.stops.find((s) => s.id === "base"), sc = base && base.site_check;
+    const rows = [];
+    if (rc && rc.pairs) {
+      const flat = rc.pairs.reduce((s, [, tilt]) => s + Math.abs(3 - tilt), 0) / rc.pairs.length;
+      const hi = rc.pairs.filter(([, tilt]) => tilt > 10), low = hi.length ? hi.reduce((s, [ours, tilt]) => s + (tilt - ours), 0) / hi.length : 0;
+      rows.push(["Is the slope map right?",
+        `Against Perseverance's tilt sensor at ${rc.n} waypoint records: ${rc.slope_mae_deg}° average difference. A flat 3° guess with no map: ${flat.toFixed(2)}°. The sensor never saw our map.`,
+        `Where the rover tilted more than 10° (${hi.length} records) our map reads about ${low.toFixed(1)}° low. That is the unsafe side, so ${a.max_slope_deg}° is a planning line, not a guarantee.`]);
+    }
+    if (v && v.steep) rows.push(["Does our route follow the rover's?",
+      `On the rover's climb to the delta top our route stays a median ${Math.round(v.median_m)} m from its track, and ${Math.round(v.within_50m_pct)} % of it is within 50 m.`,
+      `It does not follow the rover, and we do not claim it does. What we claim: a straight line crosses ${v.steep.line.steep_m} m of ground over ${v.steep.limit_deg}°, the rover crossed ${v.steep.rover.steep_m} m, and our route ${v.steep.ours.steep_m || "none"} (a rule in the planner, not a test result).`]);
+    if (bp) {
+      const sp = (f) => (Math.ceil(f * bp.v * 100 - 1e-6) / 100).toFixed(2);
+      rows.push(["Does the plan survive a slower crew?",
+        `Every check has a breaking point. At a plan pace of ${bp.v} m/s the default walk passes; "Plan fits" holds down to ${sp(bp.plan)} m/s, the bad-day check to ${sp(bp.bad)} m/s and the suit check to ${sp(bp.suit)} m/s.`,
+        `A crew slower than about ${sp(bp.bad)} m/s fails the bad-day check on this walk. The app then says to leave earlier, shorten a stop or drop one.`]);
+    }
+    rows.push(["Does the bad-day rule pay off?",
+      `Same stops, same bad luck, two rules. In ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment) the usual walk-back rule needed its reserve ${BENEFIT.usual} times, ours ${BENEFIT.ours} times.`,
+      `The usual-rule plan is our own comparison, and the slowdown range is assumed. With walks up to 30 % slower ours needed the reserve ${BENEFIT.ours30} times (the usual rule ${BENEFIT.usual30}). The rule costs ${BENEFIT.price_min} min at the science stops. Nobody went past the suit limit in any run.`]);
+    rows.push(["Do the stored plan and the browser agree?",
+      `The stored plan comes from a 2 m grid: +${wb.worst.margin_min} min, +${wb.bad.worst.margin_min} min and ${wb.suit.worst.back} min. The browser re-plans on a 4 m grid: +${ENGINE4.plan}, +${ENGINE4.bad} and ${ENGINE4.suit}.`,
+      "After you move a stop or a slider, the numbers on screen are the 4 m ones. They can differ from the stored plan by up to about a minute."]);
+    if (sc) rows.push(["Is base camp a landing site?",
+      `No. Within ${sc.radius_m} m of it the ground reaches ${sc.slope_max}°. NASA's Artemis III EVA study draws a 100 m landing circle with slopes under 5°.`,
+      "Failed, and we say so. Base camp was placed on top of the delta so that the loop fits the time rules."]);
+    rows.push(["Are the numbers re-checked?",
+      "70 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search and the Mars daylight method (node --test).",
+      "They test the numbers and the route engine, not the screens. The screens were checked in a browser by an AI reviewer, on a desktop size and a phone size."]);
+    return `<h3 id="how-checked">What we checked, and what failed</h3>
+      <table class="chk-tbl"><tr><th>We asked</th><th>We checked</th><th>Limit, or what failed</th></tr>
+      ${rows.map(([q, c, l]) => `<tr><td>${q}</td><td>${c}</td><td>${l}</td></tr>`).join("")}</table>`;
+  }
+
   function renderAbout(m) {
     const a = m.assumptions, rc = m.rover_check, v = m.validation;
     const base = m.stops.find((s) => s.id === "base"), sc = base.site_check;
@@ -1333,6 +1379,7 @@
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}
       ${v ? `<p><b>Same climb, different ramp.</b> Between the rover's start and end of its climb onto the delta (sols ${v.sols[0]}–${v.sols[1]}), our walking route stays a median ${Math.round(v.median_m)} m from the rover's track. The rover took a longer path for a one-tonne vehicle and stopped for science, so the two are not expected to match.${v.steep ? ` A straight line between the same two points would cross ${v.steep.line.steep_m} m of slopes steeper than ${v.steep.limit_deg}°, and the rover crossed ${v.steep.rover.steep_m} m; our walk crosses ${v.steep.ours.steep_m ? `${v.steep.ours.steep_m} m` : "none"}.` : ""}</p>
       <figure class="fig"><a href="img/rover_check.jpg" target="_blank" rel="noopener"><img src="img/rover_check.jpg" alt="Map of Perseverance's climb to the delta top: the rover's real path, Red Route's planned walk and a straight line, over slopes steeper than 15 degrees" loading="lazy"></a></figure>` : ""}
+      ${checkedHtml(m)}
       <h3>Where it can be wrong</h3>
       <ul><li>Rocks smaller than about 1.5 m are not in the elevation model. Crews still need the photos to spot boulders.</li>
         <li>The walking curve is Earth-calibrated. Real suited speed depends on the suit, the load and fatigue.</li>
