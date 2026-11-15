@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 <link rel="stylesheet" href="extra/proof-strip.css?v=1">
 <link rel="stylesheet" href="extra/daylight.css?v=1">
 <link rel="stylesheet" href="extra/cuff-card.css?v=1">
@@ -68,7 +68,10 @@
 <footer class="pnl timeline" id="timeline">
   <button class="play" id="playBtn" aria-label="Walk the plan"><span class="tri"></span><span class="pl">Walk the plan</span><span class="gnum" aria-hidden="true">2</span></button>
   <div class="tl-wrap"><svg id="tlSvg" aria-label="EVA timeline and elevation profile"></svg><div class="tl-tip" id="tlTip" hidden></div></div>
-  <button class="astro-open" id="astroBtn" aria-label="Open the astronaut view"><span class="helm"></span><span>Astronaut view</span></button>
+  <div class="tl-side">
+    <button class="astro-open" id="astroBtn" aria-label="Open the astronaut view"><span class="helm"></span><span>Astronaut view</span></button>
+    <a class="walk3d" id="walk3d" href="3d/" title="Walk the plan in 3D at true scale, with the same get-home numbers. The astronaut figure there is an AI-generated 3D model, labelled on screen.">3D walk</a>
+  </div>
 </footer>
 
 <!-- Astronaut view: what the crew sees on the walk. A few big numbers, large buttons for gloves. -->

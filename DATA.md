@@ -51,11 +51,16 @@ Astrogeology PDS Annex, U.S. Geological Survey.
 |---|---|---|---|
 | Leaflet 1.9.4 | The map in the web app (loaded from cdnjs) | BSD 2-Clause | https://leafletjs.com/ |
 | Barlow and Barlow Semi Condensed, by Jeremy Tribby | Fonts (loaded from Google Fonts) | SIL Open Font License 1.1 | https://fonts.google.com/specimen/Barlow |
+| three.js r169 | The 3D walk page (bundled in `docs/3d/vendor/`) | MIT | https://threejs.org/ |
 | NumPy, SciPy, scikit-image, rasterio, Pillow | The Python build (`tools/`) | Open source (BSD-style licences; Pillow: MIT-CMU) | https://pypi.org/ |
 
 The logo in the page header and the browser-tab icon are drawn by `tools/make_logo.py` from our own terrain shading
 (HiRISE elevation model) and the planned walk. Until 14 Nov 2026 the site used an AI-generated badge (Higgsfield),
-labelled as AI-generated; it was replaced and is still in the git history. No AI-generated images are used in the app now.
+labelled as AI-generated; it was replaced and is still in the git history. The planner itself uses no AI-generated images.
+
+The 3D walk page (`docs/3d/`) shows one AI-generated 3D astronaut model (Higgsfield, Meshy 6 text-to-3D), with an
+"AI-generated" label on screen. `docs/3d/assets/ASTRONAUT_MODEL.md` gives the prompt and what was changed afterwards;
+`docs/3d/assets/GROUND_PICTURE.md` describes the HiRISE ground picture used there (NASA data, no AI).
 
 Base camp is not a checked landing site. It was placed on top of the delta so that the loop fits the time rules.
 Within 100 m the ground reaches 19.5° on our 2 m slope grid; the Artemis III EVA study

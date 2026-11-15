@@ -467,3 +467,11 @@ body.astro-on { overflow: hidden; }
   .drill-card .dr-pick .dpick { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .drill-card .dr-pick .dpick button { padding: 4px 2px; }
 }
+/* the clock's right column: Astronaut view, and under it the link to the 3D walk page (docs/3d) */
+.tl-side { flex: none; width: 112px; display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+.tl-side .astro-open { flex: 1; width: auto; border-left: 0; }
+.walk3d { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; border-top: 1px solid var(--line);
+  color: var(--text); text-decoration: none; font: 600 11px/1 var(--cond); letter-spacing: .14em; text-transform: uppercase; }
+.walk3d::after { content: "\203A"; font-size: 16px; line-height: 1; color: var(--route); margin-top: -2px; }
+.walk3d:hover, .walk3d:focus-visible { background: rgba(255,255,255,.06); color: var(--route); }
+@media (max-width: 900px) { .tl-side { width: 84px; } .walk3d { height: 38px; font-size: 10.5px; letter-spacing: .1em; } }

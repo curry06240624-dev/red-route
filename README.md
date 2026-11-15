@@ -24,6 +24,7 @@ landing circle with slopes under 5°.
 - **Topographic:** slope and rough ground computed from the 1 m HiRISE elevation model (USGS Mars 2020 TRN DTM).
 - **Thermal:** an optional night-time infrared layer from Mars Odyssey THEMIS (100 m pixels, via Mars Trek): rock stays warmer at night, loose sand and dust cool faster. Context only; not used in the route.
 - **Safety:** three get-home checks, each with its breaking point (how much slower the walk can be before it fails), a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, the 50-minute backup-oxygen line, and bad-day drill buttons (crewmate hurt, suit alarm, storm warning, running late) that answer from the crew's position.
+- **3D walk:** a "3D walk" link beside the Astronaut view opens `3d/`: the planned walk at true scale on the HiRISE terrain, with the same get-home numbers, leave-by times and two drills. The astronaut figure is an AI-generated 3D model, labelled on screen.
 - **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
 - **Conditions:** NASA DONKI space-weather notices (read live from NASA's CCMC service; NOT CHECKED if it does not answer), the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live), and a quiet-day radiation dose for the walk from Curiosity RAD's published average at Gale Crater (for scale only). An oxygen line gives NASA's planning rate for a spacewalk (0.086 kg per crew member per hour) times the time outside, about 0.25 kg each on the default walk; it is not a per-metre model, because we found no NASA measurement of suited walking at this pace in Mars gravity. The storm drill can replay the solar storm of 20 May 2024 from Curiosity RAD's archived readings (NASA PDS): 37 minutes from the alarm to the strongest reading, and the dose on the walk home. The 25 % warning rule the RAD team published (Löwe et al. 2025, Space Weather), applied by us to the same readings, picks the same reading as our own alarm line. The same paper advises staying within 30 minutes of shelter; the default walk goes further (53 minutes to be inside from its farthest point), the app says so, and an optional map layer draws the 30-minute line.
 - **Deciding check:** the checks panel names the one check that decides the plan, where and when (default walk: the suit-failure check at Three Forks, about 8 min of backup oxygen to spare), and pins it on the map.
@@ -87,8 +88,10 @@ The code was written with help from an AI coding assistant (Claude by Anthropic)
 first version of the site, the science stops and the route rules; the team reviewed and approved them and
 asked for later changes. All data shown in the app come from NASA, USGS and ESA. The logo is drawn by our
 code (`tools/make_logo.py`) from our own terrain map and the planned walk. Until 14 Nov 2026 the site used an
-AI-generated badge (Higgsfield), labelled as AI-generated; it was replaced and is still in the git history. No
-AI-generated images are used in the app now.
+AI-generated badge (Higgsfield), labelled as AI-generated; it was replaced and is still in the git history. The
+planner itself uses no AI-generated images. The 3D walk page (`docs/3d/`, opened by the "3D walk" link) shows one
+AI-generated 3D astronaut model (Higgsfield, Meshy 6 text-to-3D) with an "AI-generated" label on screen;
+`docs/3d/assets/ASTRONAUT_MODEL.md` gives the prompt and what was changed afterwards.
 
 ## License
 Apache-2.0 (see LICENSE). NASA and USGS data keep their own terms; see DATA.md.
