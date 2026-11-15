@@ -132,7 +132,7 @@
       const b = wb.bad.worst, badBy = `T+${hm(wb.bad.budget_min)}`;
       out.push({ key: "bad", name: "If something goes wrong", ok: b.margin_min >= 0,
         val: `${b.margin_min >= 0 ? "PASS" : "FAIL"} ${sgn(b.margin_min)}${fmtMin(b.margin_min)}`,
-        sub: b.margin_min >= 0 ? `Home by ${badBy} even at half speed (crewmate hurt), from any point of the walk. The reserve stays untouched.`
+        sub: b.margin_min >= 0 ? `Home by ${badBy} even if EV2 is hurt and EV1 helps at half speed, from any point of the walk. The reserve stays untouched.`
           : `At T+${hm(b.t)} near ${nearestStopName(b.lat, b.lon)} a half-speed walk home takes ${fmtMin(b.back)}: ${fmtMin(b.margin_min)} past ${badBy}. Leave that stop earlier, shorten a stop or drop one.` });
     }
     if (wb.suit) {
@@ -145,7 +145,7 @@
     if (bp) for (const c of out) {
       c.bp = bpText(bp[c.key], bp.v);
       if (c.key === "bad" && c.ok && isFinite(bp.hurt) && bp.hurt <= bp.hurtRule)
-        c.bp += ` A hurt crewmate could be as slow as ${Math.ceil(bp.hurt * 100 - 1e-6)} % of normal pace; the rule assumes ${Math.round(bp.hurtRule * 100)} %.`;
+        c.bp += ` The hurt crewmate (EV2) could be as slow as ${Math.ceil(bp.hurt * 100 - 1e-6)} % of normal pace; the rule assumes ${Math.round(bp.hurtRule * 100)} %.`;
     }
     return out;
   }
@@ -154,7 +154,7 @@
     const m = S.m, t = m.totals, rc = m.rover_check, air = m.walkback.airlock_min || 0;
     const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span>${c.bp ? `<span class="bp" data-src="derived">${esc(c.bp)}</span>` : ""}</div>`).join("");
     $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
-      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}</div>
+      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}<br>CREW OF TWO · EV1 AND EV2 WALK TOGETHER</div>
       ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots. <a href="#" id="proofLink">See the test</a></div>` : ""}
       <hr class="r">`;
     const pl = $("#proofLink");
@@ -812,8 +812,8 @@
     let title, body, note;
     if (drill.type === "hurt") {
       const left = homeBy - n.T, half = bf * n.back, spare = left - half;
-      title = "Crewmate hurt";
-      body = row("Walk home at normal pace", fmtMin(n.back)) + row(`At half speed, helping the hurt crewmate`, fmtMin(half))
+      title = "Crewmate hurt (EV2)";
+      body = row("Walk home at normal pace", fmtMin(n.back)) + row(`At half speed, EV1 helping the hurt EV2`, fmtMin(half))
         + row(`Time left to be home by T+${hm(homeBy)}`, fmtMin(left)) + verdict(spare >= 0, spareTxt(spare));
       note = 'Same rule as the "If something goes wrong" check. The reserve stays untouched.';
     } else if (drill.type === "suit") {
@@ -1002,7 +1002,7 @@
     $("#aStatus").className = `astro-status ${cls}`;
     $("#aWord").textContent = word;
     $("#aSpare").textContent = spare;
-    $("#aBad").innerHTML = st.after ? "" : `If a crewmate gets hurt: <b class="${mBad < 0 ? "bad" : ""}">${fmtMin(mBad)} ${mBad < 0 ? "short" : "to spare"}</b>`;
+    $("#aBad").innerHTML = st.after ? "" : `If EV2 is hurt and EV1 helps: <b class="${mBad < 0 ? "bad" : ""}">${fmtMin(mBad)} ${mBad < 0 ? "short" : "to spare"}</b>`;
     // walk home, measured against the 50 min of backup oxygen
     $("#aBack").textContent = `${Math.round(back)} MIN`;
     $("#aBack").className = back > lim ? "bad" : "";
@@ -1231,10 +1231,11 @@
     const base = m.stops.find((s) => s.id === "base"), sc = base.site_check;
     $("#aboutBody").innerHTML = `<h2>How Red Route works</h2>
       <p>Red Route plans a walking EVA in Jezero Crater and checks, at every minute of the walk, that the crew can still get home.</p>
+      <p>The plan is for a crew of two, EV1 and EV2, who walk together and stay together.</p>
       <h3>The get-home checks</h3>
       <table><tr><th>Check</th><th>Rule</th><th>Where the rule comes from</th></tr>
         <tr><td>Plan fits</td><td>Time so far + walk home at normal pace ≤ ${a.eva_limit_h} h minus ${Math.round(a.reserve * 100)} % reserve minus ${a.airlock_min || 0} min of airlock time (getting out and back in)</td><td>NASA plans about 6 h inside an 8 h suit (<a href="https://www.nasa.gov/wp-content/uploads/2017/02/eva-exp-0042_xeva_system_con_ops_rev_b_final_dtd_10192020_ref_doc.pdf" target="_blank" rel="noopener">EVA-EXP-0042</a>)</td></tr>
-        <tr><td>If something goes wrong</td><td>Time so far + walk home at half speed must fit the same time. The reserve stays untouched.</td><td>Our assumption, built on NASA's walk-back idea (<a href="https://ttu-ir.tdl.org/handle/2346/74208" target="_blank" rel="noopener">EVA walk-back limit study</a>) and rescue of a hurt crewmate (<a href="https://ntrs.nasa.gov/citations/20230005461" target="_blank" rel="noopener">NASA NTRS 20230005461</a>)</td></tr>
+        <tr><td>If something goes wrong</td><td>EV2 is hurt and EV1 helps: time so far + walk home at half speed must fit the same time. The reserve stays untouched.</td><td>Our assumption, built on NASA's walk-back idea (<a href="https://ttu-ir.tdl.org/handle/2346/74208" target="_blank" rel="noopener">EVA walk-back limit study</a>) and rescue of a hurt crewmate (<a href="https://ntrs.nasa.gov/citations/20230005461" target="_blank" rel="noopener">NASA NTRS 20230005461</a>)</td></tr>
         <tr><td>Suit failure</td><td>Walk home ≤ ${a.suit_fail_min || 50} min from every point (1 h backup oxygen, ~10 min to get inside)</td><td>NASA sizes walking EVAs on the backup oxygen (<a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a>)</td></tr></table>
       <h3>How the route is found</h3>
       <ol><li>Slope and rough ground come from the 1 m HiRISE elevation model of Jezero (USGS, Mars 2020 landing products), corrected for the map projection.</li>
