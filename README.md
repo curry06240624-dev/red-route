@@ -49,7 +49,7 @@ landing circle with slopes under 5°.
 - Our slope map agrees with Perseverance's own tilt sensor at 189 rover stops: 1.33° average difference, 93 % within 3°.
 - On the rover's climb to the delta top (sols 693–736), a straight line would cross 154 m of slopes steeper than 15°; our planned walk crosses none (`tools/rover_check.py` draws the map).
 
-- In 1,000 simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment), the same stops planned with the usual walk-back rule needed the reserve 320 times; our plan, 18 times. The comparison plan is our own, and the slowdown range is assumed. Re-run: `node validation/bad_day_simulation.mjs docs`.
+- In the same 1,000 simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment), three plans on the same stops needed the reserve this often: planned with the usual walk-back rule, 320 times; planned with our rule, using all the time it allows, 111 times; our own plan, which also keeps 14 min spare, 18 times. Our rule costs 29 min at the stops. The first two plans are our own constructions, and the slowdown range is assumed. Re-run: `node validation/bad_day_simulation.mjs docs`.
 - "How it works" in the app has a table, "What we checked, and what failed", with a limit next to every claim.
 
 These are planning assumptions for a hackathon prototype, not NASA flight rules. They are listed in the app under "How it works".
@@ -76,7 +76,7 @@ Automated tests with Node's built-in test runner (no packages to install; checke
 ```bash
 node --test
 ```
-70 tests pass (62 for the plan and the route engine, 8 for the Mars daylight method). They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
+75 tests pass (62 for the plan and the route engine, 8 for the Mars daylight method, 5 that re-run the 1,000-walk simulation). They check the stored default plan (+43.2 min, +13.8 min, 42.4 of 50 min, home by T+3:36, leave by
 T+2:11 and T+2:37), recompute it from the stored walk profile, check that no point of the walk is steeper than 15°,
 recount the rover tilt test from its stored pairs, and run the browser's route engine (`docs/router.js`) on the 4 m
 grid: the default walk comes out close to the stored 2 m plan, and with Tenby added both time checks fail (57 and 95 min).

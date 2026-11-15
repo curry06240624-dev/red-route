@@ -8,6 +8,8 @@
 //  USUAL     = the same stops, made with the usual walk-back rule only (normal-pace walk home must fit),
 //              with the spare minutes spent at the last stop, as a planner using that rule may do;
 //  FIRST     = our own first plan (4 stops), made before the airlock time was counted.
+//  RED ROUTE MAXED = the same stops, made with the bad-day rule, with ALL its spare minutes spent at the last stop.
+//              This is the fair rule-against-rule comparison with USUAL: both plans spend everything their rule allows.
 // "Touched the reserve" = got home after the reserve-free budget (T+216 min). "Over the suit limit" = after T+360 min
 // (8 h minus the 2 h airlock). Usage: node bad_day_simulation.mjs <red-route/docs dir> [out.json]
 // AI use: this script was written by an AI coding assistant (Claude, by Anthropic), directed by the team.
@@ -113,6 +115,8 @@ const extra = Math.floor(red.walkback.worst.margin_min);
 const usual = run(m.order, { [lastStop]: (m.stops.find((s) => s.id === lastStop).dwell_min || 0) + extra });
 if (usual.walkback.worst.margin_min < 0) throw new Error("usual-rule plan does not pass the usual rule");
 const first = run(["base", "depot", "gap", "top", "base"]);
+const spareBad = Math.floor(red.walkback.bad.worst.margin_min);
+const redMax = run(m.order, { [lastStop]: (m.stops.find((s) => s.id === lastStop).dwell_min || 0) + spareBad });
 
 const result = {
   generated: new Date().toISOString(), engine: "red-route/docs/router.js (unchanged), app data in docs/data",
@@ -120,7 +124,7 @@ const result = {
     usual_plan: `same stops, +${extra} min at ${lastStop}` },
   reproduced_app_numbers: { engine_4m: { plan_fits: got[0], bad_day: got[1], suit_worst: got[2] },
     published_2m: { plan_fits: want[0], bad_day: want[1], suit_worst: want[2] } },
-  plans: [test("RED ROUTE (bad-day rule)", red), test("USUAL (normal-pace walk-back rule only)", usual), test("FIRST (our first plan, 4 stops)", first)],
+  plans: [test("RED ROUTE (bad-day rule)", red), test("USUAL (normal-pace walk-back rule only)", usual), test("FIRST (our first plan, 4 stops)", first), test("RED ROUTE MAXED (bad-day spare spent at last stop)", redMax)],
 };
 // sensitivity: the same 1,000 hidden-problem walks with other slowdown ranges (same seed)
 function hidden(res, maxSlow) {
@@ -129,7 +133,8 @@ function hidden(res, maxSlow) {
   return w.reserve + w.over;
 }
 result.sensitivity_reserve_used_per_1000 = [0, 0.1, 0.2, 0.3].map((x) => ({
-  slowdown: x ? `0-${x * 100} %` : "none", red_route: hidden(red, x), usual_rule: hidden(usual, x) }));
+  slowdown: x ? `0-${x * 100} %` : "none", red_route: hidden(red, x), red_route_maxed: hidden(redMax, x), usual_rule: hidden(usual, x), over_suit: [red, redMax, usual].map((p) => overOnly(p, x)) }));
+function overOnly(res, maxSlow) { const S = series(res), r = rng(20261115); let o = 0; for (let i = 0; i < 1000; i++) { const s = 1 + maxSlow * r(); const tau = r() * endTime(S, s); if (classify(tau + BF * backAt(S, s, tau)) === "over") o++; } return o; }
 const text = JSON.stringify(result, null, 1);
 if (outPath) fs.writeFileSync(outPath, text);
 console.log(text);

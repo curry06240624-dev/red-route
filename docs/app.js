@@ -242,12 +242,17 @@
      - 8,100 micrograys: what RAD measured in the solar storm of 20 May 2024 (NASA/JPL news release, 10 June 2024). */
   const RAD = { gale_mgy_day: 0.21, storm_ugy: 8100,
     paper: "https://doi.org/10.1126/science.1244797", storm: "https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/" };
-  /* Results of two checks that are run outside the browser and re-checked by the tests:
-     - BENEFIT: validation/bad_day_simulation.mjs (seed 20261115). 1,000 simulated walks, each up to 20 % slower than planned
-       with a crewmate hurt at a random moment; "usual" is the same stops planned with the normal-pace walk-back rule
-       only, its spare 43 min spent at the last stop. Counted: walks that had to use the reserve.
+  /* Results of two checks that are run outside the browser. Both are re-run by the tests (tests/bad-day-simulation.test.js
+     and tests/browser-engine.test.js), which fail if the numbers written here stop matching.
+     - BENEFIT: validation/bad_day_simulation.mjs (seed 20261115). The same 1,000 simulated walks for three plans on the
+       same stops; each walk is up to 20 % slower than planned (the "30" numbers: up to 30 %) and a crewmate is hurt at
+       a random moment. Counted: walks that had to use the reserve.
+         usual = planned with the normal-pace walk-back rule only, all the time that rule allows spent at the last stop;
+         maxed = planned with our bad-day rule, all the time that rule allows spent at the last stop (rule against rule);
+         ours  = our own plan, which also keeps 14 min spare.
+       The rule costs 29 min at the stops (128 - 99); our plan keeps 14 more as spare (99 - 85).
      - ENGINE4: the default walk re-planned by the browser's engine on the 4 m grid (the stored plan is from a 2 m grid). */
-  const BENEFIT = { walks: 1000, usual: 320, ours: 18, usual30: 347, ours30: 59, price_min: 43 };
+  const BENEFIT = { walks: 1000, usual: 320, maxed: 111, ours: 18, usual30: 347, maxed30: 160, ours30: 59, rule_cost_min: 29, plan_spare_min: 14 };
   const ENGINE4 = { plan: 43.9, bad: 14.7, suit: 41.9 };
   const walkDoseUGy = (m) => RAD.gale_mgy_day * 1000 * ((m.totals.eva_h * 60) / 1440);   // quiet-day dose for the time outside
 
@@ -1328,8 +1333,8 @@
         `A crew slower than about ${sp(bp.bad)} m/s fails the bad-day check on this walk. The app then says to leave earlier, shorten a stop or drop one.`]);
     }
     rows.push(["Does the bad-day rule pay off?",
-      `Same stops, same bad luck, two rules. In ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment) the usual walk-back rule needed its reserve ${BENEFIT.usual} times, ours ${BENEFIT.ours} times.`,
-      `The usual-rule plan is our own comparison, and the slowdown range is assumed. With walks up to 30 % slower ours needed the reserve ${BENEFIT.ours30} times (the usual rule ${BENEFIT.usual30}). The rule costs ${BENEFIT.price_min} min at the science stops. Nobody went past the suit limit in any run.`]);
+      `Three plans on the same stops, in the same ${BENEFIT.walks.toLocaleString("en-US")} simulated walks (each up to 20 % slower than planned, a crewmate hurt at a random moment). A plan made with the usual walk-back rule, using all the time that rule allows, needed its reserve ${BENEFIT.usual} times. A plan made with our rule, using all the time it allows: ${BENEFIT.maxed} times. Our own plan, which also keeps ${BENEFIT.plan_spare_min} min spare: ${BENEFIT.ours} times.`,
+      `The first two plans are our own constructions, and the slowdown range is assumed. Our rule costs ${BENEFIT.rule_cost_min} min at the science stops, and our plan keeps ${BENEFIT.plan_spare_min} more as spare. With walks up to 30 % slower the three numbers are ${BENEFIT.usual30}, ${BENEFIT.maxed30} and ${BENEFIT.ours30}. Nobody went past the suit limit in any run.`]);
     rows.push(["Do the stored plan and the browser agree?",
       `The stored plan comes from a 2 m grid: +${wb.worst.margin_min} min, +${wb.bad.worst.margin_min} min and ${wb.suit.worst.back} min. The browser re-plans on a 4 m grid: +${ENGINE4.plan}, +${ENGINE4.bad} and ${ENGINE4.suit}.`,
       "After you move a stop or a slider, the numbers on screen are the 4 m ones. They can differ from the stored plan by up to about a minute."]);
@@ -1337,7 +1342,7 @@
       `No. Within ${sc.radius_m} m of it the ground reaches ${sc.slope_max}°. NASA's Artemis III EVA study draws a 100 m landing circle with slopes under 5°.`,
       "Failed, and we say so. Base camp was placed on top of the delta so that the loop fits the time rules."]);
     rows.push(["Are the numbers re-checked?",
-      "70 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search and the Mars daylight method (node --test).",
+      "75 automated tests re-run the default results, the leave-by times, the third-stop failure, the tilt test with its flat-guess baseline, the browser's route search, the Mars daylight method and the 1,000-walk simulation (node --test).",
       "They test the numbers and the route engine, not the screens. The screens were checked in a browser by an AI reviewer, on a desktop size and a phone size."]);
     return `<h3 id="how-checked">What we checked, and what failed</h3>
       <table class="chk-tbl"><tr><th>We asked</th><th>We checked</th><th>Limit, or what failed</th></tr>

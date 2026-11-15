@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-15T07:55:26.639Z",
+ "generated": "2026-11-15T10:12:12.899Z",
  "engine": "red-route/docs/router.js (unchanged), app data in docs/data",
  "rules": {
   "budget_min": 216,
@@ -90,28 +90,75 @@
     "reserve_used": 409,
     "over_suit_limit": 0
    }
+  },
+  {
+   "plan": "RED ROUTE MAXED (bad-day spare spent at last stop)",
+   "order": "base > depot > gap > base",
+   "dist_km": 2.34,
+   "time_outside_min": 186.1,
+   "stop_minutes": 99,
+   "usual_rule_margin_min": 29.9,
+   "bad_day_margin_min": 0.7,
+   "suit_worst_walk_home_min": 41.9,
+   "good_day": "ok",
+   "hurt_every_moment": {
+    "moments": 1862,
+    "reserve_untouched_pct": 100,
+    "reserve_used_pct": 0,
+    "over_suit_limit_pct": 0,
+    "latest_home_min": 215.3
+   },
+   "hidden_problems_1000_walks": {
+    "reserve_untouched": 889,
+    "reserve_used": 111,
+    "over_suit_limit": 0
+   }
   }
  ],
  "sensitivity_reserve_used_per_1000": [
   {
    "slowdown": "none",
    "red_route": 0,
-   "usual_rule": 270
+   "red_route_maxed": 0,
+   "usual_rule": 270,
+   "over_suit": [
+    0,
+    0,
+    0
+   ]
   },
   {
    "slowdown": "0-10 %",
    "red_route": 0,
-   "usual_rule": 294
+   "red_route_maxed": 52,
+   "usual_rule": 294,
+   "over_suit": [
+    0,
+    0,
+    0
+   ]
   },
   {
    "slowdown": "0-20 %",
    "red_route": 18,
-   "usual_rule": 320
+   "red_route_maxed": 111,
+   "usual_rule": 320,
+   "over_suit": [
+    0,
+    0,
+    0
+   ]
   },
   {
    "slowdown": "0-30 %",
    "red_route": 59,
-   "usual_rule": 347
+   "red_route_maxed": 160,
+   "usual_rule": 347,
+   "over_suit": [
+    0,
+    0,
+    0
+   ]
   }
  ]
 }
