@@ -6,15 +6,15 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=4";
-import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=4";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=4";
+import * as P from "./plan.js?v=5";
+import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=5";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=5";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const DEG = Math.PI / 180;
-const ARRIVE_M = 12, LEAVE_M = 22, ON_ROUTE_M = 15;
+const ARRIVE_M = 15, LEAVE_M = 25, ON_ROUTE_M = 15;
 const DWELL_RATE = 600;          // while the crew works at a stop, the clock runs this many times faster than real time
 const SPEEDS = [1, 10, 30, 60];
 const DEFAULT_ORDER = ["base", "depot", "gap", "top", "base"];
@@ -202,7 +202,8 @@ function start(mode) {
   if (TOUCH) document.body.classList.add("touch");
   if (Q.get("view") === "third") setView("third");
   if (Q.get("speed")) S.speed = +Q.get("speed") || 30;
-  if (mode === "plan") { S.mode = "plan"; S.playing = true; } else S.mode = "free";
+  if (mode === "plan") { S.mode = "plan"; S.playing = true; toast("Following the plan. Walk any time to take over.", 4500); }
+  else { S.mode = "free"; toast(TOUCH ? "Use the stick to walk. Drag to look around." : "W A S D to walk. Drag the mouse to look around.", 6000); }
   if (Q.get("t") != null) jump(parseFloat(Q.get("t")), Q.get("play") === "1");
   if (Q.get("menu") === "1") toggleMenu(true);
   if (Q.get("drill")) setTimeout(() => openDrill(Q.get("drill")), 400);
@@ -259,7 +260,8 @@ function initInput() {
   window.addEventListener("blur", () => keys.clear());
   const cv = $("#view");
   let drag = null;
-  cv.addEventListener("pointerdown", (e) => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.classList.add("drag"); });
+  const capture = (el, id) => { try { el.setPointerCapture(id); } catch (err) { /* the pointer is already gone */ } };
+  cv.addEventListener("pointerdown", (e) => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; capture(cv, e.pointerId); cv.classList.add("drag"); });
   cv.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const k = e.pointerType === "touch" ? 0.28 : 0.2, dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k;
@@ -279,7 +281,7 @@ function initInput() {
     const len = Math.hypot(x, y); if (len > 1) { x /= len; y /= len; }
     stick.x = x; stick.y = y; knob.style.transform = `translate(${x * R * 0.6}px, ${y * R * 0.6}px)`;
   };
-  st.addEventListener("pointerdown", (e) => { stick.id = e.pointerId; st.setPointerCapture(e.pointerId); setStick(e); e.preventDefault(); });
+  st.addEventListener("pointerdown", (e) => { stick.id = e.pointerId; capture(st, e.pointerId); setStick(e); e.preventDefault(); });
   st.addEventListener("pointermove", (e) => { if (e.pointerId === stick.id) setStick(e); });
   const sEnd = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; } };
   st.addEventListener("pointerup", sEnd); st.addEventListener("pointercancel", sEnd);
@@ -513,10 +515,11 @@ function drawMini() {
 
 /* ---------- drills ---------- */
 function openDrill(type) {
-  const n = S.nav || navNow();
-  if (!n || n.after) return;
-  if (S.mode === "plan" && S.playing) { S.playing = false; syncButtons(); }
+  if (S.mode === "plan" && S.playing) { S.playing = false; syncButtons(); }   // the card belongs to one moment: stop the clock first
   if (S.free && S.free.working) S.free.working = null;
+  const n = navNow();
+  if (!n || n.after) return;
+  S.nav = n;
   const where = n.here ? `at ${P.shortName(n.here)}` : S.mode === "plan" || n.src === "plan" ? `on the way to ${P.shortName(n.nextS)}` : "off the route";
   let h;
   if (n.src === "none" || n.src === "wait") {
@@ -595,7 +598,15 @@ function frame(now) {
   renderer.render(scene, camera);
   placeLabels();
   if (now - hudT > 90 || S.hudKey === "") { hudT = now; S.hudKey = "ok"; if (S.started) renderHud(); }
-  frames++; if (now - fpsT > 1000) { S.fps = Math.round((frames * 1000) / (now - fpsT)); frames = 0; fpsT = now; }
+  frames++;
+  if (now - fpsT > 1000) {
+    S.fps = Math.round((frames * 1000) / (now - fpsT)); frames = 0; fpsT = now;
+    // slow device: after three slow seconds in a row, draw fewer pixels and drop the shadows
+    if (S.started && document.visibilityState === "visible") {
+      S.slow = S.fps < 24 ? (S.slow || 0) + 1 : 0;
+      if (S.slow >= 3 && !S.lite) { S.lite = true; renderer.setPixelRatio(1); renderer.shadowMap.enabled = false; lights.sun.castShadow = false; resize(); }
+    }
+  }
 }
 
 // hooks for tests: read the helmet numbers, jump to a moment, change the view (nothing here changes the plan)

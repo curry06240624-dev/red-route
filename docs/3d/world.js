@@ -286,11 +286,20 @@ export class StopMarkers {
       const col = new THREE.Color(s.color);
       const hgt = 22 + (this.items.length % 3) * 9;   // different heights, so labels in one line of sight do not cover each other
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, hgt, 6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: s.optional ? 0.3 : 0.6, fog: false }));
-      post.position.set(x + 2.5, y + hgt / 2, z - 2.5);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(5.6, 6.0, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: s.optional ? 0.3 : 0.75, side: THREE.DoubleSide, depthWrite: false }));
-      ring.rotation.x = -Math.PI / 2; ring.position.set(x, y + 0.35, z);
+      post.position.set(x + 6.5, y + hgt / 2, z - 3);
+      // a ring that lies on the ground, also on a slope
+      const N = 72, rp = new Float32Array((N + 1) * 6), ri = [];
+      for (let k = 0; k <= N; k++) {
+        const a = (k / N) * Math.PI * 2, cx = Math.cos(a), cz = Math.sin(a);
+        const ax = x + cx * 5.6, az = z + cz * 5.6, bx = x + cx * 6.0, bz = z + cz * 6.0;
+        rp.set([ax, this.G.height(ax, az) + 0.3, az, bx, this.G.height(bx, bz) + 0.3, bz], k * 6);
+        if (k < N) ri.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2);
+      }
+      const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.BufferAttribute(rp, 3)); rg.setIndex(ri);
+      const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: s.optional ? 0.3 : 0.75, side: THREE.DoubleSide, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 }));
       this.group.add(post, ring);
-      this.items.push({ id: s.id, top: new THREE.Vector3(x + 2.5, y + hgt + 1.5, z - 2.5), foot: new THREE.Vector3(x, y, z) });
+      this.items.push({ id: s.id, top: new THREE.Vector3(x + 6.5, y + hgt + 1.5, z - 3), foot: new THREE.Vector3(x, y, z) });
     }
   }
 }
