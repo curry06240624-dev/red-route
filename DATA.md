@@ -60,7 +60,12 @@ labelled as AI-generated; it was replaced and is still in the git history. The p
 
 The 3D walk page (`docs/3d/`) shows one AI-generated 3D astronaut model (Higgsfield, Meshy 6 text-to-3D), with an
 "AI-generated" label on screen. `docs/3d/assets/ASTRONAUT_MODEL.md` gives the prompt and what was changed afterwards;
-`docs/3d/assets/GROUND_PICTURE.md` describes the HiRISE ground picture used there (NASA data, no AI).
+`docs/3d/assets/GROUND_PICTURE.md` describes the two HiRISE ground pictures used there (`jezero_hirise_ortho.jpg`, the whole
+grid at about 1.2 m per pixel, and `jezero_hirise_corridor.jpg`, a box around the route at about 0.3 m per pixel; both are
+the HiRISE orthomosaic from NASA JPL Mars Trek tiles, NASA/JPL/University of Arizona and USGS, joined and cut, with
+nothing drawn on them and no AI). On that page the Mars colours, the rocks (their places follow our rough-ground grid,
+their shapes are made up), footprints, dust, the sky, the sun position, the habitat shape, the film look and the sound
+are an illustration made by our code; the sound is not a recording. The astronaut model is the only AI-made thing there.
 
 Base camp is not a checked landing site. It was placed on top of the delta so that the loop fits the time rules.
 Within 100 m the ground reaches 19.5° on our 2 m slope grid; the Artemis III EVA study
