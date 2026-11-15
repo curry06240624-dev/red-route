@@ -1,0 +1,14 @@
+/* AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
+/* Red Route add-on: spoken alerts. The "Voice: off / on" button sits next to the Map button in the Astronaut view;
+   the small note goes on its own line under the buttons. */
+.astro-top.sv-has { flex-wrap: wrap; row-gap: 4px; }
+.astro-top.sv-has .astro-title { margin-left: auto; }   /* keeps the title between the clock and the buttons */
+.astro-top.sv-has .sv { display: contents; }
+.sv[hidden] { display: none !important; }
+.sv-btn { margin-left: auto; white-space: nowrap; }
+.sv-btn.on { border-color: var(--route); background: rgba(255, 106, 61, .14); color: #fff; }
+.sv-note { order: 9; flex: 1 0 100%; font: 400 12px/1.35 Barlow, "Segoe UI", sans-serif; color: var(--dim); text-align: right; }
+@media (max-width: 900px) {
+  .astro-top.sv-has { column-gap: 10px; row-gap: 6px; }
+  .sv-btn { min-width: 108px; padding: 0 10px; font-size: 13px; letter-spacing: .1em; }
+}
