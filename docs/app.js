@@ -87,9 +87,40 @@
     return best ? best.name : "the route";
   }
 
+  /* ---------- breaking point (DERIVED): how much slower the whole walk can be before a check fails ----------
+     Every walking time and every walk-home time scales with 1 / speed; the time at the stops does not.
+     So for each point of the walk the slowest pace that still passes has a closed form, and the check
+     breaks at the largest of those. Same numbers as the planner, no new route search. */
+  function breakingPoints(m) {
+    const P = m.profile || [], tl = m.timeline || [], wb = m.walkback;
+    if (!P.length || !tl.length || !wb) return null;
+    const dwellBefore = []; let d = 0;   // minutes spent at stops before each leg starts
+    for (let i = 0; i < tl.length - 1; i++) { d += tl[i].depart_min - tl[i].arrive_min; dwellBefore[i] = d; }
+    const B = wb.budget_min, k = wb.bad ? wb.bad.factor : 2, Bb = wb.bad ? wb.bad.budget_min : B;
+    let fPlan = 0, fBad = 0, backMax = 0, hurt = 0;
+    for (const p of P) {
+      const dw = dwellBefore[p.leg] || 0, walk = p.t - dw;
+      fPlan = Math.max(fPlan, B - dw > 0 ? (walk + p.back) / (B - dw) : Infinity);
+      fBad = Math.max(fBad, Bb - dw > 0 ? (walk + k * p.back) / (Bb - dw) : Infinity);
+      backMax = Math.max(backMax, p.back);
+      if (p.back > 0) hurt = Math.max(hurt, Bb - p.t > 0 ? p.back / (Bb - p.t) : Infinity);   // slowest walk-home pace from here
+    }
+    return { plan: fPlan, bad: fBad, suit: wb.suit ? backMax / wb.suit.limit_min : null, hurt, hurtRule: 1 / k, v: m.assumptions.v_flat_ms };
+  }
+  // percentages are rounded down and speeds up, so the text never promises more room than there is
+  function bpText(f, v) {
+    if (f == null || !isFinite(f) || f <= 0) return "";
+    const sp = (Math.ceil(f * v * 100 - 1e-6) / 100).toFixed(2);
+    if (f <= 1) {
+      const pct = Math.floor((1 - f) * 100 + 1e-6);
+      return pct >= 1 ? `Breaking point: still passes with the whole walk ${pct} % slower (${sp} m/s).` : `Breaking point: no room to walk slower (${sp} m/s).`;
+    }
+    return `Would pass only if the whole walk were ${Math.ceil((f - 1) * 100 - 1e-6)} % faster (${sp} m/s).`;
+  }
+
   /* ---------- the three get-home checks ---------- */
   function getChecks(m) {
-    const wb = m.walkback, out = [];
+    const wb = m.walkback, out = [], bp = breakingPoints(m);
     const w = wb.worst, air = wb.airlock_min || 0, homeBy = `T+${hm(wb.budget_min)}`;
     // the time for walking and stops: the suit limit, minus the reserve, minus the time to get out and back in
     const how = `${wb.eva_limit_h} h suit limit minus ${Math.round(wb.reserve * 100)} % reserve${air ? ` minus ${air % 60 ? fmtMin(air) : `${air / 60} h`} to get out and back in` : ""}`;
@@ -111,12 +142,17 @@
         sub: ok ? "Longest walk home stays inside the 1 h backup oxygen"
           : `Near ${nearestStopName(s.lat, s.lon)} the walk home is ${fmtMin(s.back)}, more than ${lim} min of backup oxygen. Move base camp closer or drop the far stop.` });
     }
+    if (bp) for (const c of out) {
+      c.bp = bpText(bp[c.key], bp.v);
+      if (c.key === "bad" && c.ok && isFinite(bp.hurt) && bp.hurt <= bp.hurtRule)
+        c.bp += ` A hurt crewmate could be as slow as ${Math.ceil(bp.hurt * 100 - 1e-6)} % of normal pace; the rule assumes ${Math.round(bp.hurtRule * 100)} %.`;
+    }
     return out;
   }
 
   function renderChecks() {
     const m = S.m, t = m.totals, rc = m.rover_check, air = m.walkback.airlock_min || 0;
-    const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span></div>`).join("");
+    const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span>${c.bp ? `<span class="bp" data-src="derived">${esc(c.bp)}</span>` : ""}</div>`).join("");
     $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
       <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}</div>
       ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots. <a href="#" id="proofLink">See the test</a></div>` : ""}
@@ -1069,6 +1105,7 @@
         <tr><td>EVA limit</td><td>${a.eva_limit_h} h, ${Math.round(a.reserve * 100)} % reserve</td><td>NASA suit design limit (EVA-EXP-0042)</td></tr>
         <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr></table>
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
+      <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} stops inside our area our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}
