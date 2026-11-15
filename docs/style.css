@@ -391,3 +391,9 @@ body.astro-on { overflow: hidden; }
   .modal-body { margin: 8px auto; }
   .drill-card, .drill-card.in-astro { position: fixed; left: 8px; right: 8px; top: auto; bottom: 10px; transform: none; margin: 0; max-height: 82vh !important; overflow-y: auto; }
 }
+/* review fixes, 15 Nov */
+.astro .stag b, .astro-tile .stag b { font: 700 11px/1 var(--cond); letter-spacing: .08em; display: inline; margin: 0; color: inherit; }
+.astro-drills[hidden] { display: none; }
+.drill-card .dbtns button[disabled] { opacity: .4; cursor: default; }
+.drill-card .lbl .stag { vertical-align: 0; }
+@media (max-width: 900px) { .drawer { z-index: 1200; } }

@@ -30,7 +30,7 @@
     hirise: { name: "HiRISE 25 cm", layer: L.tileLayer(trekUrl("JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd", "png"),
       { maxNativeZoom: 17, maxZoom: 19, bounds: JEZ_HIRISE, attribution: `${credit} · HiRISE (NASA/JPL/UArizona, USGS)` }) },
     ctx: { name: "CTX 6 m", layer: L.tileLayer(trekUrl("Jezero_CTX_BlockAdj_dd", "png"),
-      { maxNativeZoom: 14, maxZoom: 19, bounds: JEZ_CTX, attribution: `${credit} · CTX (NASA/JPL/MSSS)` }) },
+      { maxNativeZoom: 12, maxZoom: 19, bounds: JEZ_CTX, attribution: `${credit} · CTX (NASA/JPL/MSSS)` }) },
     hrsc: { name: "HRSC + MOLA relief", layer: L.tileLayer(trekUrl("Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", "jpg"),
       { maxNativeZoom: 8, maxZoom: 19, attribution: `${credit} · Mars Express HRSC (ESA/DLR/FU Berlin) + MOLA (NASA), USGS blend` }) },
     mola: { name: "MOLA elevation", layer: L.tileLayer(trekUrl("Mars_MGS_MOLA_ClrShade_merge_global_463m", "jpg"),
@@ -65,7 +65,7 @@
     refreshDonki();
   }).catch((e) => { console.error(e); $("#checks").innerHTML = '<div class="bad">Could not load the mission data.</div>'; });
 
-  function renderAll() { renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } document.dispatchEvent(new CustomEvent("redroute:render")); }
+  function renderAll() { closeDrill(); renderChecks(); renderStopList(); renderConditions(); renderStopPanel(); renderLegend(); drawTimeline(); if (astro.open) { renderAstroTrack(); drawAstroRoute(); } document.dispatchEvent(new CustomEvent("redroute:render")); }
 
   function fitRoute() {
     const b = S.routeLine.getBounds();
@@ -254,22 +254,21 @@
       const a = link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${v.cls === "ok" ? "latest notice" : "the notice"}</a>` : "";
       if (live) {
         html += `<div class="cond-row"><span>Space weather${stag("n", "how-data")}</span><b class="${v.cls}">${v.word}</b><span class="s">${esc(v.sub)} Live NASA DONKI notices${a}.</span></div>`;
-      } else if (v.cls !== "ok") {   // a saved warning is still worth showing, with its date
-        html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">As of ${esc(saved)}: ${esc(v.sub)} Saved NASA DONKI notices; ${S.donki.failed ? "the live feed did not answer" : "checking the live feed"}${a}.</span></div>`;
-      } else if (S.donki.failed) {   // never show a green CLEAR from old data
-        html += `<div class="cond-row"><span>Space weather</span><b class="warn">NOT CHECKED</b><span class="s">The live NASA DONKI feed did not answer, so today's space weather is not checked. The saved notices from ${esc(saved)} showed no alert${a}.</span></div>`;
+      } else if (S.donki.failed) {   // never a green CLEAR from old data; a saved warning is quoted with its date
+        const was = v.cls === "ok" ? "showed no alert" : `said ${v.word}: ${esc(v.sub)}`;
+        html += `<div class="cond-row"><span>Space weather${stag("n", "how-data")}</span><b class="warn">NOT CHECKED</b><span class="s">The live NASA DONKI feed did not answer, so today's space weather is not checked. The saved notices from ${esc(saved)} ${was}${a}.</span></div>`;
       } else {
-        html += `<div class="cond-row"><span>Space weather</span><b>CHECKING</b><span class="s">Reading the live NASA DONKI notices.</span></div>`;
+        html += `<div class="cond-row"><span>Space weather${stag("n", "how-data")}</span><b>CHECKING</b><span class="s">Reading the live NASA DONKI notices.</span></div>`;
       }
     }
     if (S.meda && S.meda.sols && S.meda.sols.length) {
       const w = S.meda.sols[S.meda.sols.length - 1];
       const [rh, rm] = w.sunrise.split(":").map(Number), [sh, sm] = w.sunset.split(":").map(Number);
       const day = ((sh * 60 + sm) - (rh * 60 + rm) - 120) / 60, fits = day >= S.m.totals.eva_h;
-      html += `<div class="cond-row"><span>Daylight${stag("n", "how-data")}</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
+      html += `<div class="cond-row"><span>Daylight${stag("d", "how-data")}</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable (sunrise to sunset, less 2 h of margin, our choice) vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
     const dose = walkDoseUGy(S.m);
-    html += `<div class="cond-row" id="radRow"><span>Radiation${stag("d", "how-numbers")}</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value: Jezero sits higher, so a little more. For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
+    html += `<div class="cond-row" id="radRow"><span>Radiation${stag("d", "how-numbers")}</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average that Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value. Jezero sits about 2 km higher, so we expect a little more there (our estimate). For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024 (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
     $("#conditions").innerHTML = html;
   }
 
@@ -286,10 +285,10 @@
     const q = `startDate=${d(start)}&endDate=${d(end)}&type=all`;
     const get = (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
     // NASA's CCMC serves the notices without a key; api.nasa.gov (demo key, rate-limited) is the second try
-    get(`https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?${q}`)
-      .catch(() => get(`https://api.nasa.gov/DONKI/notifications?${q}&api_key=DEMO_KEY`))
+    const list = (r) => (Array.isArray(r) ? r : Promise.reject(new Error("not a list")));
+    get(`https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?${q}`).then(list)
+      .catch(() => get(`https://api.nasa.gov/DONKI/notifications?${q}&api_key=DEMO_KEY`).then(list))
       .then((notes) => {
-        if (!Array.isArray(notes)) return;
         S.donki = { live: true, fetched: d(end),
           notes: notes.map((n) => ({ type: n.messageType, id: n.messageID, issued: n.messageIssueTime, url: n.messageURL, body: (n.messageBody || "").slice(0, 8000) })) };
         renderConditions();
@@ -332,7 +331,7 @@
         <div class="src">Perseverance, sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m from this stop` : ""} · ${esc(photoCredits(photos))}</div>`;
     }
     if (tr) {
-      html += `<hr class="r"><div class="lbl-lg">Terrain within 50 m${stag("n", "how-data", 1)}</div><table class="tbl">
+      html += `<hr class="r"><div class="lbl-lg">Terrain within 50 m${stag("d", "how-route", 1)}</div><table class="tbl">
         <tr><td>Slope, mean / max</td><td>${tr.slope_mean}° / ${tr.slope_max}°</td></tr>
         <tr><td>Roughness (RMS)</td><td>${tr.rough_rms} m</td></tr>
         <tr><td>Elevation</td><td>${Math.round(tr.elev_min)} to ${Math.round(tr.elev_max)} m</td></tr>
@@ -379,7 +378,7 @@
     { id: "hillshade", name: "Terrain shading", file: "hillshade.png", on: false, sw: "linear-gradient(90deg,#222,#ddd)" },
     // Mars Odyssey THEMIS night-time infrared, 100 m pixels (NASA JPL Mars Trek). Context only: it is not used in the route.
     { id: "themis", name: "Night heat (THEMIS infrared)", on: false, sw: "linear-gradient(90deg,#1a1a1a,#e5e5e5)",
-      note: "100 m pixels, from Mars Odyssey. At night, rock stays warmer (bright) and loose sand or dust cools faster (dark). Shades are relative, not temperatures. Context only: not used in the route." },
+      note: "100 m pixels, from Mars Odyssey. At night, rock stays warmer (bright) and loose sand or dust cools faster (dark). Shades are relative, not temperatures. Zoom out to see it. Context only: not used in the route." },
     { id: "traverse", name: "Perseverance's real path", on: true, sw: "repeating-linear-gradient(90deg,#38bdf8 0 4px,transparent 4px 7px)" },
     { id: "o2", name: "50-min backup-oxygen line", on: true, sw: "repeating-linear-gradient(90deg,#fbbf24 0 5px,transparent 5px 8px)" },
   ];
@@ -402,7 +401,8 @@
       rows.push(['<i style="background:rgba(74,222,128,.35);border:1px solid #bbf7d0"></i>', "Can still get home (if something goes wrong)"]);
       rows.push(['<i style="height:2px;background:rgba(255,255,255,.7)"></i>', "Normal-pace limit"]);
       rows.push(['<i style="width:12px;height:12px;border-radius:50%;background:#38bdf8;border:2px solid #fff"></i>', "Crew now"]);
-      rows.push(['<i style="width:10px;height:10px;border-radius:50%;border:2px solid var(--warn)"></i>', "Tightest point of the plan"]);
+      rows.push(['<i style="width:10px;height:10px;border-radius:50%;border:2px solid var(--warn)"></i>', "Tightest point (plan fits)"]);
+      if (drill.line) rows.push(['<i style="height:0;border-top:3px dotted #f9a8d4;background:none"></i>', "Way home (drill)"]);
     }
     for (const o of OVERLAYS) {
       const lay = S.overlays[o.id] || (o.id === "o2" ? zone.o2 : null);
@@ -669,6 +669,7 @@
   function setTime(T) {
     const m = S.m;
     if (!m) return;
+    if (drill.type && drill.T != null && Math.abs(T - drill.T) > 0.01) closeDrill();   // the card belongs to one moment
     eva.T = T;
     if (!zone.active) { zone.active = true; renderLegend(); }
     movePlayhead(T);
@@ -761,20 +762,32 @@
      Each drill pauses the clock and reads the same numbers the three checks use, at the crew's position
      on the planned walk. Nothing in the plan is changed. The storm warning time is a what-if the user picks. */
   const DRILLS = [["hurt", "Crewmate hurt here"], ["suit", "Suit alarm here"], ["storm", "Storm warning now"], ["late", "Running late +10 min"]];
+  const LATE_MAX = 120;   // the delay drill stops adding here
   const drillBtns = () => DRILLS.map(([k, t]) => `<button data-drill="${k}">${t}</button>`).join("");
-  const drill = { type: null, warn: 30, late: 0, line: null };
+  const drill = { type: null, warn: 30, late: 0, line: null, T: null };
   const drillEl = el("div", "pnl drill-card");
   drillEl.hidden = true; drillEl.setAttribute("role", "dialog"); drillEl.setAttribute("aria-label", "Bad-day drill");
   document.body.appendChild(drillEl);
-  $("#live").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
+  // The strip above the map is redrawn on every frame while the walk plays, so a mouse click (down, then up)
+  // would be lost: open the drill on pointer-down, and keep "click" for the keyboard.
+  let drillTap = 0;
+  const liveDrill = (e) => {
+    const b = e.target.closest("[data-drill]");
+    if (!b) return;
+    if (e.type === "pointerdown") { if (e.button) return; drillTap = performance.now(); }
+    else if (performance.now() - drillTap < 800) return;
+    openDrill(b.dataset.drill);
+  };
+  $("#live").addEventListener("pointerdown", liveDrill);
+  $("#live").addEventListener("click", liveDrill);
   $("#aDrills").innerHTML = drillBtns();
   document.querySelectorAll(".stag-slot").forEach((e) => { const [k, how] = e.dataset.stag.split(":"); e.innerHTML = stag(k, how); });
   $("#aDrills").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
   drillEl.addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
+    const b = e.target.closest("button"); if (!b || b.classList.contains("stag")) return;
     if (b.dataset.warn) { drill.warn = +b.dataset.warn; renderDrill(); }
-    else if (b.dataset.late === "more") { drill.late += 10; renderDrill(); }
-    else if (b.dataset.late === "clear") { drill.late = 0; closeDrill(); }
+    else if (b.dataset.late === "more") { drill.late = Math.min(LATE_MAX, drill.late + 10); renderDrill(); }
+    else if (b.dataset.late === "clear") closeDrill();
     else if (b.dataset.close != null) closeDrill();
   });
 
@@ -786,7 +799,17 @@
     const c0 = Math.floor((pos[1] - g.lon0) / g.dlon), r0 = Math.floor((g.lat1 - pos[0]) / g.dlat);
     if (r0 < 0 || r0 >= g.h || c0 < 0 || c0 >= g.w) return null;
     let i = r0 * g.w + c0;
-    if (f[i] === 65535) return null;
+    if (f[i] === 65535) {   // a stop can sit on a cell that is no-go on this coarser grid: start from the nearest cell that is not
+      let best = -1, bd = Infinity;
+      for (let dr = -8; dr <= 8; dr++) for (let dc = -8; dc <= 8; dc++) {
+        const rr = r0 + dr, cc = c0 + dc;
+        if (rr < 0 || rr >= g.h || cc < 0 || cc >= g.w) continue;
+        const j = rr * g.w + cc, d2 = dr * dr + dc * dc;
+        if (f[j] !== 65535 && d2 < bd) { bd = d2; best = j; }
+      }
+      if (best < 0) return null;
+      i = best;
+    }
     const pts = [pos], seen = new Set([i]);
     for (let n = 0; n < 40000 && f[i] > 0; n++) {
       const r = (i / g.w) | 0, c = i % g.w;
@@ -804,26 +827,29 @@
       if (n % 2 === 0) pts.push([g.lat1 - (((i / g.w) | 0) + 0.5) * g.dlat, g.lon0 + ((i % g.w) + 0.5) * g.dlon]);
     }
     if (f[i] > 10) return null;   // did not come within a minute of base camp
-    const b = stopById("base"); pts.push([b.lat, b.lon]);
+    const bs = stopById("base"); pts.push([bs.lat, bs.lon]);
     return pts;
   }
 
   function openDrill(type) {
     if (!S.m || !eva.nav || eva.nav.st.after) return;
     if (eva.playing) pause();
-    if (type === "late") drill.late = drill.type === "late" ? drill.late + 10 : 10; else drill.late = 0;
-    drill.type = type;
+    if (type === "late") drill.late = drill.type === "late" ? Math.min(LATE_MAX, drill.late + 10) : 10; else drill.late = 0;
+    drill.type = type; drill.T = eva.nav.T;
     if (drill.line) { map.removeLayer(drill.line); drill.line = null; }
     if (type !== "late") {
       const pts = wayHome(eva.nav.pos);
-      if (pts) drill.line = L.polyline(pts, { color: "#7dd3fc", weight: 3.5, dashArray: "2 8", lineCap: "round", interactive: false }).addTo(map);
+      if (pts) drill.line = L.polyline(pts, { color: "#f9a8d4", weight: 3.5, dashArray: "2 8", lineCap: "round", interactive: false }).addTo(map);
     }
+    renderLegend();
     renderDrill();
   }
   function closeDrill() {
-    drill.type = null; drill.late = 0;
+    if (!drill.type && drillEl.hidden && !drill.line) return;
+    drill.type = null; drill.late = 0; drill.T = null;
     drillEl.hidden = true;
     if (drill.line) { map.removeLayer(drill.line); drill.line = null; }
+    renderLegend();
   }
   function renderDrill() {
     const n = eva.nav, m = S.m;
@@ -831,54 +857,71 @@
     const wb = m.walkback, bf = wb.bad ? wb.bad.factor : 2, homeBy = wb.bad ? wb.bad.budget_min : wb.budget_min;
     const where = n.here ? `at ${shortName(n.here)}` : `on the way to ${shortName(n.nextS)}`;
     const row = (k, v) => `<div class="dr"><span>${k}</span><b>${v}</b></div>`;
-    const verdict = (ok, txt) => `<div class="dv ${ok ? "ok" : "bad"}">${ok ? "MAKES IT" : "DOES NOT MAKE IT"}<small>${txt}</small></div>`;
+    const verdict = (ok, txt, word) => `<div class="dv ${ok ? "ok" : "bad"}">${word || (ok ? "MAKES IT" : "DOES NOT MAKE IT")}<small>${txt}</small></div>`;
     const spareTxt = (x, unit = "to spare") => (x >= 0 ? `${fmtMin(x)} ${unit}` : `${fmtMin(x)} short`);
+    // whole minutes, and the spare time is worked out from the whole minutes shown, so each card adds up
+    const backR = Math.round(n.back);
     let title, body, note;
     if (drill.type === "hurt") {
-      const left = homeBy - n.T, half = bf * n.back, spare = left - half;
+      const left = Math.round(homeBy - n.T), half = Math.round(bf * n.back), spare = left - half;
       title = "Crewmate hurt (EV2)";
-      body = row("Walk home at normal pace", fmtMin(n.back)) + row(`At half speed, EV1 helping the hurt EV2`, fmtMin(half))
-        + row(`Time left to be home by T+${hm(homeBy)}`, fmtMin(left)) + verdict(spare >= 0, spareTxt(spare));
+      body = row("Walk home at normal pace", fmtMin(backR)) + row("At half speed, EV1 helping the hurt EV2", fmtMin(half))
+        + row(`Time left to be home by T+${hm(homeBy)}`, fmtMin(left)) + verdict(n.mBad >= 0, spareTxt(spare));
       note = 'Same rule as the "If something goes wrong" check. The reserve stays untouched.';
     } else if (drill.type === "suit") {
-      const spare = n.lim - n.back;
       title = "Suit alarm";
-      body = row("Walk home from here", fmtMin(n.back)) + row("Backup oxygen for the walk", `${n.lim} min`) + verdict(spare >= 0, spareTxt(spare, "of backup oxygen to spare"));
+      body = row("Walk home from here", fmtMin(backR)) + row("Backup oxygen for the walk", `${n.lim} min`) + verdict(n.back <= n.lim, spareTxt(n.lim - backR, "of backup oxygen to spare"));
       note = 'Same rule as the "Suit failure" check: 1 h of backup oxygen, about 10 min of it to get inside.';
     } else if (drill.type === "storm") {
-      const spare = drill.warn - n.back;
+      const spare = drill.warn - backR, dose = walkDoseUGy(m);
       title = "Storm warning";
-      body = `<div class="dr"><span>Warning time (what-if, you pick)</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
-        + row("Walk home from here", fmtMin(n.back)) + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the warning time runs out` : `${fmtMin(spare)} short of shelter`);
-      const dose = walkDoseUGy(m);
-      note = `A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm, about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times this walk's quiet-day dose (see Radiation under Conditions).`;
+      body = `<div class="dr"><span>Warning time (what-if, you pick)${stag("a", "drillHow")}</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
+        + row("Walk home from here", fmtMin(backR)) + verdict(n.back <= drill.warn, spare >= 0 ? `inside ${fmtMin(spare)} before the warning time runs out` : `${fmtMin(spare)} short of shelter`);
+      note = `A what-if, not a forecast: real warning times depend on the storm. For scale, Curiosity's RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray during the solar storm of 20 May 2024. That is about ${Math.round(RAD.storm_ugy / dose / 10) * 10} times the quiet-day dose of this whole walk (see Radiation under Conditions).`;
     } else {
       const D = drill.late, P = m.profile, tl = m.timeline || [], lastT = P[P.length - 1].t;
-      let worst = Infinity;
-      for (const p of P) if (p.t >= n.T - 1e-6) worst = Math.min(worst, wb.budget_min - (p.t + D + p.back), homeBy - (p.t + D + bf * p.back));
-      let rows = "", fix = "";
-      for (let i = 1; i < tl.length - 1; i++) {
-        const t = tl[i];
-        if (t.depart_min < n.T - 1e-6) continue;   // already left this stop
-        const s = stopById(m.order[i]), dep = t.depart_min + D, spare = leaveBy(t) - dep;
-        rows += row(`Leave ${esc(shortName(s))}`, `T+${hm(dep)} <small>leave by T+${hm(leaveBy(t))} · ${spare >= 0 ? `${fmtMin(spare)} to spare` : `${fmtMin(spare)} late`}</small>`);
-        if (spare < 0 && !fix) {
-          const need = Math.ceil(-spare), stay = t.depart_min - Math.max(t.arrive_min, n.T);
-          fix = stay <= 0 ? `Leave ${esc(shortName(s))} now: the delay has used up the stop and ${need} min more.`
-            : need <= stay ? `Shorten the stop at ${esc(shortName(s))} by ${need} min (${fmtMin(stay)} planned there), or drop it.`
-            : `Shortening ${esc(shortName(s))} is not enough (${fmtMin(stay)} planned there, ${need} min to win back). Drop it.`;
-        }
+      let wPlan = Infinity, wBad = Infinity;   // the tightest moments from now on, with the delay added
+      for (const pt of P) if (pt.t >= n.T - 1e-6) {
+        wPlan = Math.min(wPlan, wb.budget_min - (pt.t + D + pt.back));
+        wBad = Math.min(wBad, homeBy - (pt.t + D + bf * pt.back));
       }
+      let rows = "", need = 0, stayAhead = 0, stayAtNeed = 0, lateStop = null, onSite = null;
+      for (let i = 1; i < tl.length - 1; i++) {
+        const tt = tl[i];
+        if (tt.depart_min < n.T - 1e-6) continue;   // already left this stop
+        const s = stopById(m.order[i]), dep = tt.depart_min + D, spare = leaveBy(tt) - dep;
+        stayAhead += Math.max(0, tt.depart_min - Math.max(tt.arrive_min, n.T));   // stop time still ahead, up to this stop
+        if (tt.arrive_min <= n.T + 1e-6) onSite = s;
+        rows += row(`Leave ${esc(shortName(s))}`, `T+${hm(dep)} <small>leave by T+${hm(leaveBy(tt))} · ${spare >= 0 ? `${fmtMin(spare)} to spare` : `${fmtMin(spare)} late`}</small>`);
+        if (-spare > need) { need = -spare; lateStop = s; stayAtNeed = stayAhead; }
+      }
+      // a minute saved at any stop still ahead moves every later departure, so the time to win back is the largest lateness
+      const needMin = need > 0 ? Math.max(1, Math.round(need)) : 0;   // rounded like the rows above, so the card agrees with itself
+      let fix = "";
+      if (needMin > 0 && lateStop) {
+        const nm = esc(shortName(lateStop));
+        if (stayAtNeed >= needMin) fix = onSite === lateStop
+          ? ` Leave ${nm} ${needMin} min earlier than planned.`
+          : ` Win back ${needMin} min before leaving ${nm}: cut the stop time still ahead (${fmtMin(stayAtNeed)} is planned).`;
+        else if (onSite === lateStop) fix = ` Leave ${nm} now. Even then the half-speed rule is ${fmtMin(needMin - Math.round(stayAtNeed))} short.`;
+        else fix = ` The stop time still ahead (${fmtMin(stayAtNeed)}) cannot win back ${needMin} min. Skip a stop: untick it in Plan your EVA to see the new plan.`;
+      }
+      const suitEnd = wb.eva_limit_h * 60 - (wb.airlock_min || 0);
       title = `Running late +${D} min`;
-      body = rows + row("Back at base camp", `T+${hm(lastT + D)} <small>plan T+${hm(lastT)}</small>`)
-        + verdict(worst >= 0, worst >= 0 ? `tightest moment still has ${fmtMin(worst)} to spare` : fix || `${fmtMin(worst)} short and no stop left to drop: head straight home.`)
-        + `<div class="dbtns"><button data-late="more">+10 min more</button><button data-late="clear">Clear the delay</button></div>`;
+      body = rows + row("Back at base camp", `T+${hm(lastT + D)} <small>plan T+${hm(lastT)}${lastT + D > suitEnd ? ` · past the suit limit T+${hm(suitEnd)}` : ""}</small>`)
+        + (wPlan < 0 ? verdict(false, `Home ${fmtMin(wPlan)} after T+${hm(wb.budget_min)}, even at normal pace.${fix}`, "DOES NOT FIT")
+          : wBad < 0 ? verdict(false, `At normal pace the crew is still home in time (${fmtMin(wPlan)} to spare). But if EV2 got hurt at the tightest moment, the half-speed walk home would be ${fmtMin(wBad)} late.${fix}`, "BAD-DAY RULE BROKEN")
+            : verdict(true, `The tightest moment still has ${fmtMin(Math.min(wPlan, wBad))} to spare.`, "STILL FITS"))
+        + `<div class="dbtns"><button data-late="more"${D >= LATE_MAX ? " disabled" : ""}>+10 min more</button><button data-late="clear">Clear the delay</button></div>`;
       note = "The delay is added to the rest of the plan. Leave-by times do not move: they come from the terrain and the suit time.";
     }
     drillEl.className = `pnl drill-card${astro.open ? " in-astro" : ""}`;
-    drillEl.innerHTML = `<div class="dh"><span class="lbl">Drill · T+${hm(n.T)} · ${esc(where)}</span><button class="x" data-close aria-label="Close the drill">&times;</button></div>
+    drillEl.innerHTML = `<div class="dh"><span class="lbl">Drill · T+${hm(n.T)} · ${esc(where)}${stag("d", "drillHow")}</span><button class="x" data-close aria-label="Close the drill">&times;</button></div>
       <div class="dt">${title}</div>${body}<p class="dn">${note}</p><button class="ghost" data-close>Back to the walk</button>`;
     drillEl.hidden = false;
+    // on a wide screen keep the card off the middle of the map: bottom left, above the clock
+    if (!astro.open && !isMobile()) { drillEl.style.top = "auto"; drillEl.style.bottom = "164px"; drillEl.style.left = "348px"; drillEl.style.transform = "none"; }
+    else { drillEl.style.top = drillEl.style.bottom = drillEl.style.left = drillEl.style.transform = ""; }
   }
 
   /* ---------- v2: Astronaut view, the crew's own screen ----------
@@ -1007,12 +1050,14 @@
     $("#aPlay").focus({ preventScroll: true });   // keep the status word in view on phones
   }
   function closeAstro() {
+    closeDrill();
     astro.open = false;
     $("#astro").hidden = true;
     document.body.classList.remove("astro-on");
   }
   function renderAstro(n) {
     if (!astro.open) return;
+    $("#aDrills").hidden = !!n.st.after;
     const { T, back, mPlan, mBad, lim, st, here, nextS, dist, pos } = n;
     const m = S.m;
     $("#aMet").textContent = `T+${hm(T)}`;
@@ -1307,5 +1352,5 @@
   // Hooks for add-on files in docs/extra/: read-only helpers, plus the events "redroute:render" (after every
   // redraw of the panels) and "redroute:time" (after every clock move, with the crew's numbers in event.detail).
   Object.assign(window.RedRoute, { api: { getChecks, breakingPoints, leaveBy, leaveSpare, stopById, shortName, nearestStopName,
-    fmtMin, hm, sgn, esc, spaceWeather, openModal, eva, zone } });
+    fmtMin, hm, sgn, esc, spaceWeather, openModal, eva, zone, stag } });
 })();
