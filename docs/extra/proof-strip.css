@@ -1,0 +1,22 @@
+/* AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md.
+   Red Route add-on: the proof strip "Checked against the real rover" at the end of the get-home checks (extra/proof-strip.js).
+   Two small cards side by side, hairline rules, square corners; bar colours match the map (ours orange, the rover blue). */
+.proof-strip { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-2); }
+.ps-top { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; margin: 0 0 6px; }
+.ps-link { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.ps-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ps-grid.one { grid-template-columns: minmax(0, 1fr); }
+.ps-card { min-width: 0; padding-right: 10px; }
+.ps-card + .ps-card { padding: 0 0 0 10px; border-left: 1px solid var(--line-2); }
+.ps-h { font: 600 11.5px/1.25 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
+.ps-sub { margin-top: 1px; font-size: 11px; line-height: 1.3; color: var(--dim); }
+.ps-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; align-items: baseline; margin-top: 5px; }
+.ps-k { font-size: 12px; line-height: 1.25; color: var(--muted); }
+.ps-row.us .ps-k { color: var(--text); }
+.ps-v { font: 600 13px/1.25 Barlow, "Segoe UI", sans-serif; color: var(--text); white-space: nowrap; }
+.ps-bar { grid-column: 1 / -1; display: block; height: 4px; margin-top: 2px; background: var(--line-2); }
+.ps-fill { display: block; height: 100%; background: rgba(255, 255, 255, .5); }
+.ps-row.us .ps-fill { background: var(--route); }
+.ps-row.rover .ps-fill { background: #38bdf8; }   /* the colour of Perseverance's path on the map */
+.ps-ci { margin-top: 3px; font-size: 10.5px; line-height: 1.3; color: var(--dim); }
+.ps-note { margin-top: 5px; font-size: 11px; line-height: 1.28; color: var(--muted); }
