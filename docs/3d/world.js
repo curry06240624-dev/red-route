@@ -150,14 +150,19 @@ export function buildTerrain(scene, G, maxSlope, step) {
   const bump = detail.clone(); bump.repeat.set(G.sizeX / 2.6, G.sizeZ / 2.6); bump.needsUpdate = true;
   const mat = new THREE.MeshLambertMaterial({ map: makeColourTexture(G), bumpMap: bump, bumpScale: 1.7 });
   const uni = { uDetail: { value: detail }, uDetailRep: { value: new THREE.Vector2(G.sizeX / 5.0, G.sizeZ / 5.0) },
-    uNoGo: { value: makeNoGoTexture(G, maxSlope) }, uTint: { value: 1 }, uBlot: { value: 1 } };
+    uNoGo: { value: makeNoGoTexture(G, maxSlope) }, uTint: { value: 1 }, uBlot: { value: 1 },
+    uHi: { value: null }, uHiRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uHiOn: { value: 0 } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
       .replace("#include <fog_vertex>", "#include <fog_vertex>\nvCamDist = length(mvPosition.xyz);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uNoGo;\nuniform vec2 uDetailRep;\nuniform float uTint;\nuniform float uBlot;\nvarying float vCamDist;")
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uNoGo;\nuniform sampler2D uHi;\nuniform vec4 uHiRect;\nuniform float uHiOn;\nuniform vec2 uDetailRep;\nuniform float uTint;\nuniform float uBlot;\nvarying float vCamDist;")
       .replace("#include <map_fragment>", `#include <map_fragment>
         {
+          vec2 hq = (vMapUv - uHiRect.xy) / (uHiRect.zw - uHiRect.xy);   // the sharper picture along the route, faded in at its edges
+          vec2 he = min(hq, 1.0 - hq);
+          float hw = uHiOn * smoothstep(0.0, 0.035, min(he.x, he.y));
+          diffuseColor.rgb = mix(diffuseColor.rgb, texture2D(uHi, clamp(hq, 0.0, 1.0)).rgb, hw);
           vec4 dA = texture2D(uDetail, vMapUv * uDetailRep);
           vec4 dB = texture2D(uDetail, vMapUv * uDetailRep * 0.083);
           float nearK = 1.0 - smoothstep(25.0, 160.0, vCamDist);
@@ -218,7 +223,19 @@ export function buildTerrain(scene, G, maxSlope, step) {
     img.onerror = () => rej(new Error("ground picture did not load"));
     img.src = url;
   });
-  return { group, mat, loadOrtho, setTint: (on) => { uni.uTint.value = on ? 1 : 0; } };
+  // rect = [u0, v0, u1, v1] of the picture in the terrain's own 0..1 square (v up)
+  const loadHi = (url, rect, width, maxSize) => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = Math.min(width, Math.floor((maxSize * img.naturalWidth) / img.naturalHeight));
+        uni.uHi.value = tintOrtho(img, w); uni.uHiRect.value.set(rect[0], rect[1], rect[2], rect[3]); uni.uHiOn.value = 1; res(true);
+      } catch (e) { rej(e); }
+    };
+    img.onerror = () => rej(new Error("corridor picture did not load"));
+    img.src = url;
+  });
+  return { group, mat, loadOrtho, loadHi, setTint: (on) => { uni.uTint.value = on ? 1 : 0; } };
 }
 
 /* ---------- sky dome with the sun ---------- */

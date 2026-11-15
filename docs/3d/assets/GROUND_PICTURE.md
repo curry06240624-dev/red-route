@@ -13,3 +13,10 @@
 It is the same imagery the main app shows as its "HiRISE 25 cm" base map. Nothing was drawn on it and no AI was used on it.
 The camera band is grey. In the 3D walk, `world.js` gives it Mars colours with a fixed colour ramp and adds a fine
 grain close to the viewer. The shape of the ground comes from the HiRISE elevation model, not from this picture.
+
+## The sharper cut along the route
+
+`jezero_hirise_corridor.jpg` is the same NASA orthomosaic at zoom level 17 (about 0.32 m per pixel), cut to a box around
+the planned walk: grid columns 373 to 577 and rows 129 to 444 (longitude 77.3972 to 77.4109 E, latitude 18.4500 to 18.4713 N).
+187 tiles from NASA Mars Trek were joined and saved as one 2560 x 3952 JPEG on 15 November 2026. Nothing was drawn on it
+and no AI was used on it. In the 3D walk it replaces the wider picture inside that box, with the same colour ramp.
