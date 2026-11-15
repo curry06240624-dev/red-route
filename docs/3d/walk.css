@@ -179,9 +179,25 @@ body.touch .mini { display: none; }
   .menu { top: 8px; right: 8px; left: 8px; bottom: 8px; width: auto; }
   #toast { bottom: calc(256px + var(--sab)); }
 }
-@media (max-height: 520px) and (min-width: 600px) {   /* phone held sideways */
-  .tiles { top: 8px; right: 8px; width: 210px; bottom: auto; }
-  .status { left: 8px; transform: none; width: min(400px, calc(100vw - 240px)); top: 8px; }
-  .status .word { font-size: 28px; }
-  .brand { display: none; } .mini { display: none; } .ai-label { bottom: 8px; left: 150px; }
+@media (max-height: 520px) and (orientation: landscape) {   /* phone held sideways */
+  .brand, .mini { display: none; }
+  .status { top: 8px; left: 8px; transform: none; width: min(340px, 42vw); padding: 5px 10px 6px 9px; border-left-width: 8px; }
+  .status .word { font-size: 26px; } .status.warn .word, .status.bad .word { font-size: 21px; }
+  .status .spare { font-size: 14px; } .status .hurt { font-size: 12px; }
+  .tiles { top: 8px; right: 8px; left: auto; bottom: auto; width: min(340px, 42vw); display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; padding: 0 10px; background: rgba(9, 10, 12, .62); }
+  .tile { padding: 4px 0 5px; } .tile:nth-child(2) { border-top: 0; }
+  .tile .lbl { font-size: 9.5px; letter-spacing: .12em; }
+  .tile b { font-size: 16px; } .next b { font-size: 14.5px; } .next { gap: 7px; }
+  .tile small { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hO2txt { display: none; } .o2bar { height: 6px; margin: 3px 0 1px; }
+  .arrow { width: 22px; height: 22px; } .arrow::after { top: 2px; margin-left: -5px; border-width: 5px; border-bottom-width: 10px; }
+  .site { top: auto; bottom: 8px; left: 50%; transform: translateX(-50%); width: auto; max-width: 44vw; padding: 5px 9px; }
+  .site span { font-size: 12px; }
+  .bar { left: auto; right: 8px; bottom: 8px; transform: none; display: grid; grid-template-columns: 1fr 1fr; width: min(250px, 32vw); }
+  .bar button { padding: 6px 8px; font-size: 10.5px; letter-spacing: .06em; min-height: 40px; white-space: normal; text-align: left; line-height: 1.15; border-top: 1px solid var(--line-2); }
+  .bar button:nth-child(odd) { border-left: 0; } .bar button:nth-child(-n+2) { border-top: 0; }
+  .stick { left: 14px; bottom: 12px; width: 108px; height: 108px; }
+  .ai-label { left: 136px; bottom: 8px; font-size: 9.5px; padding: 3px 7px; }
+  #toast { bottom: 52px; }
+  .menu { top: 8px; right: 8px; left: auto; bottom: 8px; width: min(380px, 60vw); }
 }

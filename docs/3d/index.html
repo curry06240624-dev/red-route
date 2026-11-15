@@ -8,7 +8,7 @@
 <meta name="description" content="Walk the Red Route Marswalk in 3D on NASA HiRISE terrain of Jezero Crater, with the get-home numbers in the helmet display.">
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/png" href="../favicon_64.png?v=2">
-<link rel="stylesheet" href="walk.css?v=5">
+<link rel="stylesheet" href="walk.css?v=6">
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body class="loading first">
@@ -91,7 +91,8 @@
   <p class="help">Laptop: <b>W A S D</b> or the arrow keys to walk, drag the mouse to look, <b>V</b> to switch view. Phone: the stick walks, drag anywhere else to look.<br>
   The mission clock (T+) runs only while you walk or work at a stop. Walking speed is the plan's: 0.56 m/s on flat ground, slower on slopes and rough ground. The speed button makes time pass faster.</p>
   <div class="lbl-lg">What you are looking at</div>
-  <p class="help" id="mCredits">Ground shape: HiRISE digital terrain model of Jezero Crater (NASA/JPL/University of Arizona; USGS Mars 2020 landing products), drawn at true scale with no height exaggeration on the app's 4 m grid. The colours and the fine grain are drawn by our code, not a photo. The sun's place is fixed for the picture. The base-camp habitat is a plain stand-in shape.<br>
+  <p class="help" id="mCredits">Ground shape: HiRISE digital terrain model of Jezero Crater (NASA/JPL/University of Arizona; USGS Mars 2020 landing products), drawn at true scale with no height exaggeration on the 4 m grid of the planner.<br>
+  Ground picture: HiRISE orthomosaic of Jezero (NASA/JPL/University of Arizona; tiles from NASA Mars Trek), about 1.2 m per pixel. The camera band is grey: the Mars colours and the fine grain near your feet are added by our code. The place of the sun is fixed for the picture. The base-camp habitat is a plain stand-in shape.<br>
   Astronaut: AI-generated 3D model (Higgsfield, Meshy 6 text-to-3D), shown with a label. It carries no logos, flags or mission marks.<br>
   3D engine: <a href="vendor/three/LICENSE" target="_blank" rel="noopener">three.js</a> r169 (MIT licence). Font: Barlow (SIL Open Font License).<br>
   All times use the same rules and data as the <a href="../">Red Route planner</a>. This page was written with an AI coding assistant, directed by the team.</p>
@@ -113,11 +114,11 @@
       <li><b>W A S D</b> walk · <b>drag</b> to look · <b>V</b> first / third person</li>
       <li>Phone: the stick walks, drag to look</li>
     </ul>
-    <p class="fine">Terrain: HiRISE DTM, NASA/JPL/UArizona/USGS · three.js, MIT · Astronaut: AI-generated 3D model (Higgsfield)</p>
+    <p class="fine">Terrain and ground picture: HiRISE, NASA/JPL/UArizona/USGS · three.js, MIT · Astronaut: AI-generated 3D model (Higgsfield)</p>
   </div>
 </div>
 <div id="toast" class="pnl" hidden></div>
 
-<script type="module" src="main.js?v=5"></script>
+<script type="module" src="main.js?v=6"></script>
 </body>
 </html>

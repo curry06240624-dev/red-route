@@ -6,9 +6,9 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=5";
-import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=5";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=5";
+import * as P from "./plan.js?v=6";
+import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=6";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=6";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -81,6 +81,8 @@ function initScene() {
   lights.sun.castShadow = true; sh.mapSize.set(1024, 1024); sh.camera.near = 1; sh.camera.far = 80;
   sh.camera.left = -9; sh.camera.right = 9; sh.camera.top = 9; sh.camera.bottom = -9; sh.bias = -0.0015; sh.normalBias = 0.04;
   terrain = buildTerrain(scene, G, S.m.assumptions.max_slope_deg, 1);
+  terrain.loadOrtho("assets/jezero_hirise_ortho.jpg?v=1", Math.min(TOUCH ? 2048 : 4096, renderer.capabilities.maxTextureSize))
+    .then(() => { S.ortho = true; }).catch((e) => console.warn("The HiRISE ground picture did not load; using colours drawn by code.", e));
   routeLine = new RouteLine(scene, G);
   routeLine.set(S.route);
   markers = new StopMarkers(scene, G);
@@ -190,7 +192,7 @@ function planChanged() {
 /* ---------- state changes ---------- */
 function resetToStart() {
   const b = P.stopById(S.m, "base");
-  S.T = 0; S.playing = false; S.free = freshFree();
+  S.T = 0; S.playing = false; S.free = freshFree(); S.ev2init = false;
   S.pos.x = G.xOf(b.lon); S.pos.z = G.zOf(b.lat);
   const ahead = P.pointAtDistance(S.route, 12);
   S.heading = P.bearing([b.lat, b.lon], ahead); S.yaw = S.heading; S.lookOff = 0; S.pitch = -4;
@@ -211,7 +213,7 @@ function start(mode) {
 }
 function jump(T, play = false) {
   closeDrill();
-  S.mode = "plan"; S.T = Math.max(0, T); S.playing = play; S.lookOff = 0; S.free = freshFree();
+  S.mode = "plan"; S.T = Math.max(0, T); S.playing = play; S.lookOff = 0; S.free = freshFree(); S.ev2init = false;
   const n = P.navOnPlan(S.m, S.route, S.T);
   S.pos.x = G.xOf(n.pos[1]); S.pos.z = G.zOf(n.pos[0]);
   S.heading = planHeading(n, S.heading, true); S.yaw = S.heading;
@@ -369,7 +371,7 @@ function update(dt) {
   ev1.place(S.pos.x, y, S.pos.z, S.heading); ev1.update(dt, moving > 0.05 ? 1 : 0, rate);
   const h = S.heading * DEG, port = camera.aspect < 1, offR = port ? 1.0 : 2.1, offF = port ? 4.2 : 4.6;
   const tx = S.pos.x + Math.cos(h) * offR + Math.sin(h) * offF, tz = S.pos.z + Math.sin(h) * offR - Math.cos(h) * offF;
-  if (!S.ev2init) { ev2.x = tx; ev2.z = tz; S.ev2init = true; }
+  if (!S.ev2init) { ev2.x = tx; ev2.z = tz; ev2.hdg = S.heading; S.ev2init = true; }
   const k = Math.min(1, dt * (4 + S.speed * 0.25 * (moving > 0 ? 1 : 0.2))), ox = ev2.x, oz = ev2.z;
   const nx2 = ox + (tx - ox) * k, nz2 = oz + (tz - oz) * k, gap = Math.hypot(tx - nx2, tz - nz2);
   const ev2moving = moving > 0.05 || gap > 0.25;
@@ -379,7 +381,8 @@ function update(dt) {
   ev1.root.visible = S.view === "third";
   // camera
   const yaw = S.yaw * DEG, pit = S.pitch * DEG;
-  if (S.view === "first") camera.position.set(S.pos.x, y + 1.62, S.pos.z);
+  S.bob = (S.bob || 0) + dt * 7.5 * (moving > 0.05 ? 1 : 0);
+  if (S.view === "first") camera.position.set(S.pos.x, y + 1.62 + (moving > 0.05 ? Math.sin(S.bob) * 0.022 : 0), S.pos.z);
   else {
     const back = 5.4, fx = Math.sin(yaw) * Math.cos(pit), fy = Math.sin(pit), fz = -Math.cos(yaw) * Math.cos(pit);
     let cx = S.pos.x - fx * back, cy = y + 1.75 - fy * back, cz = S.pos.z - fz * back;
@@ -610,6 +613,6 @@ function frame(now) {
 }
 
 // hooks for tests: read the helmet numbers, jump to a moment, change the view (nothing here changes the plan)
-window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
+window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ ortho: !!S.ortho, fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
 
 boot().catch((e) => { console.error(e); $("#lMsg").textContent = "Could not load the 3D walk. Please reload the page."; });

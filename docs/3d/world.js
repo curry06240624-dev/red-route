@@ -1,7 +1,8 @@
 /* Red Route 3D walk: the world.
    Jezero terrain as a true-scale mesh from the app's own elevation grid (docs/data/grid_dem.i16, resampled from the
    USGS Mars 2020 HiRISE DTM), ground steeper than the no-go slope tinted as in the app, sky, sun, the planned
-   route as a red line and the stops. Nothing here is a photo: colour and fine grain are drawn by this code.
+   route as a red line and the stops. The ground picture is the HiRISE orthomosaic of Jezero (assets/jezero_hirise_ortho.jpg,
+   see assets/GROUND_PICTURE.md), given Mars colours by this code; the fine grain close to the feet is drawn by this code.
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
 import { Line2 } from "three/addons/lines/Line2.js";
@@ -80,8 +81,8 @@ function makeDetailTexture() {
   return t;
 }
 
-// ground colour per grid cell. tint = true adds the app's no-go colours (yellow > orange > red) on ground steeper than the limit
-function makeColourTexture(G, maxSlope, tint) {
+// ground colour per grid cell, drawn by code: used until the HiRISE picture has loaded, and kept if it cannot load
+function makeColourTexture(G) {
   const W = G.W, H = G.H, c = document.createElement("canvas"); c.width = W; c.height = H;
   const ctx = c.getContext("2d"), img = ctx.createImageData(W, H), px = img.data;
   const lerp = (a, b, t) => a + (b - a) * t, span = Math.max(1, G.zMax - G.zMin);
@@ -93,43 +94,75 @@ function makeColourTexture(G, maxSlope, tint) {
     let R = lerp(142, 198, dust), Gc = lerp(92, 140, dust), B = lerp(62, 96, dust);
     const rock = Math.min(1, s / 26);
     R = lerp(R, 104, rock * 0.55); Gc = lerp(Gc, 70, rock * 0.55); B = lerp(B, 54, rock * 0.55);
-    if (tint && s > maxSlope) {
-      const t = Math.min(1, (s - maxSlope) / 12);   // #facc15 -> #f97316 -> #dc2626
-      const tr = t < 0.5 ? lerp(250, 249, t * 2) : lerp(249, 220, (t - 0.5) * 2);
-      const tg = t < 0.5 ? lerp(204, 115, t * 2) : lerp(115, 38, (t - 0.5) * 2);
-      const tb = t < 0.5 ? lerp(21, 22, t * 2) : lerp(22, 38, (t - 0.5) * 2);
-      const a = 0.62;
-      R = lerp(R, tr, a); Gc = lerp(Gc, tg, a); B = lerp(B, tb, a);
-    }
     const o = i * 4; px[o] = R; px[o + 1] = Gc; px[o + 2] = B; px[o + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
+  return finishTexture(new THREE.CanvasTexture(c));
+}
+function finishTexture(t) {
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true;
   t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+  return t;
+}
+
+// The real ground picture: the HiRISE orthomosaic of Jezero (grey, one band), given Mars colours by a fixed colour ramp.
+// The picture is NASA data; the colours are ours (the camera band is not a colour photo).
+function tintOrtho(img, width) {
+  const W = Math.min(width, img.naturalWidth), H = Math.round((W * img.naturalHeight) / img.naturalWidth);
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, W, H);
+  const id = ctx.getImageData(0, 0, W, H), px = id.data;
+  const lut = new Uint8Array(256 * 3), lo = [70, 44, 32], mid = [176, 118, 80], hi = [242, 200, 160];
+  for (let v = 0; v < 256; v++) {
+    const g = Math.min(1, Math.max(0, (v / 255 - 0.47) * 1.5 + 0.5));   // a little more contrast around the middle grey
+    for (let k = 0; k < 3; k++) lut[v * 3 + k] = g < 0.5 ? lo[k] + (mid[k] - lo[k]) * g * 2 : mid[k] + (hi[k] - mid[k]) * (g - 0.5) * 2;
+  }
+  for (let o = 0; o < px.length; o += 4) { const v = px[o] * 3; px[o] = lut[v]; px[o + 1] = lut[v + 1]; px[o + 2] = lut[v + 2]; }
+  ctx.putImageData(id, 0, 0);
+  return finishTexture(new THREE.CanvasTexture(c));
+}
+
+// the no-go colours of the main app (yellow > orange > red) on ground steeper than the limit, as a see-through layer
+function makeNoGoTexture(G, maxSlope) {
+  const W = G.W, H = G.H, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(W, H), px = img.data, lerp = (a, b, t) => a + (b - a) * t;
+  for (let i = 0; i < W * H; i++) {
+    const s = G.slope[i] === 255 ? 0 : G.slope[i] * G.g.slope_scale, o = i * 4;
+    const t = Math.min(1, Math.max(0, (s - maxSlope) / 12));   // #facc15 -> #f97316 -> #dc2626
+    px[o] = t < 0.5 ? lerp(250, 249, t * 2) : lerp(249, 220, (t - 0.5) * 2);
+    px[o + 1] = t < 0.5 ? lerp(204, 115, t * 2) : lerp(115, 38, (t - 0.5) * 2);
+    px[o + 2] = t < 0.5 ? lerp(21, 22, t * 2) : lerp(22, 38, (t - 0.5) * 2);
+    px[o + 3] = s > maxSlope ? 118 : 0;
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
   return t;
 }
 
 /* ---------- terrain mesh, in chunks so the parts out of view are skipped ---------- */
 export function buildTerrain(scene, G, maxSlope, step) {
   const W = G.W, H = G.H, g = G.g, dem = G.dem;
-  const mapTint = makeColourTexture(G, maxSlope, true), mapPlain = makeColourTexture(G, maxSlope, false);
   const detail = makeDetailTexture();
-  const mat = new THREE.MeshLambertMaterial({ map: mapTint });
-  const uni = { uDetail: { value: detail }, uDetailRep: { value: new THREE.Vector2(G.sizeX / 5.0, G.sizeZ / 5.0) } };
+  const mat = new THREE.MeshLambertMaterial({ map: makeColourTexture(G) });
+  const uni = { uDetail: { value: detail }, uDetailRep: { value: new THREE.Vector2(G.sizeX / 5.0, G.sizeZ / 5.0) },
+    uNoGo: { value: makeNoGoTexture(G, maxSlope) }, uTint: { value: 1 }, uBlot: { value: 1 } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
       .replace("#include <fog_vertex>", "#include <fog_vertex>\nvCamDist = length(mvPosition.xyz);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform vec2 uDetailRep;\nvarying float vCamDist;")
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D uDetail;\nuniform sampler2D uNoGo;\nuniform vec2 uDetailRep;\nuniform float uTint;\nuniform float uBlot;\nvarying float vCamDist;")
       .replace("#include <map_fragment>", `#include <map_fragment>
         {
           vec4 dA = texture2D(uDetail, vMapUv * uDetailRep);
           vec4 dB = texture2D(uDetail, vMapUv * uDetailRep * 0.083);
           float nearK = 1.0 - smoothstep(25.0, 160.0, vCamDist);
           float grain = mix(1.0, 0.74 + 0.52 * dA.r, nearK);
-          float blot = 0.86 + 0.28 * dB.g;
+          float blot = mix(1.0, 0.86 + 0.28 * dB.g, uBlot);
           diffuseColor.rgb *= grain * blot;
+          vec4 ng = texture2D(uNoGo, vMapUv);
+          diffuseColor.rgb = mix(diffuseColor.rgb, ng.rgb, ng.a * uTint);
         }`);
   };
   mat.customProgramCacheKey = () => "rr-terrain";
@@ -175,7 +208,14 @@ export function buildTerrain(scene, G, maxSlope, step) {
   const far = new THREE.Mesh(new THREE.CircleGeometry(40000, 48), new THREE.MeshLambertMaterial({ color: 0x9a6a48 }));
   far.rotation.x = -Math.PI / 2; far.position.set(G.sizeX / 2, -6, G.sizeZ / 2); far.matrixAutoUpdate = false; far.updateMatrix();
   scene.add(far);
-  return { group, mat, setTint: (on) => { mat.map = on ? mapTint : mapPlain; mat.needsUpdate = true; } };
+  // the real picture of the ground, when it has loaded
+  const loadOrtho = (url, width) => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { try { const old = mat.map; mat.map = tintOrtho(img, width); uni.uBlot.value = 0.35; mat.needsUpdate = true; if (old) old.dispose(); res(true); } catch (e) { rej(e); } };
+    img.onerror = () => rej(new Error("ground picture did not load"));
+    img.src = url;
+  });
+  return { group, mat, loadOrtho, setTint: (on) => { uni.uTint.value = on ? 1 : 0; } };
 }
 
 /* ---------- sky dome with the sun ---------- */
