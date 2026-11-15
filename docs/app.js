@@ -682,8 +682,10 @@
       <div><span class="lbl">Walk home</span><b class="${suitBad ? "bad" : ""}">${fmtMin(back)}</b></div>
       <div><span class="lbl">If something goes wrong</span><b class="${mBad < 0 ? "bad" : "ok"}">${sgn(mBad)}${fmtMin(mBad)}</b></div>
       <div><span class="lbl">Plan fits</span><b class="${mPlan < 0 ? "bad" : mPlan < 30 ? "warn" : "ok"}">${sgn(mPlan)}${fmtMin(mPlan)}</b></div>
-      ${alarm ? '<div class="alarm-txt">TURN BACK</div>' : ""}`;
-    renderAstro({ T, back, mPlan, mBad, lim, st, here, nextS, dist, pos });
+      ${alarm ? '<div class="alarm-txt">TURN BACK</div>' : ""}
+      ${st.after ? "" : `<div class="drills" role="group" aria-label="Bad-day drills: what if it goes wrong right here">${drillBtns()}</div>`}`;
+    eva.nav = { T, back, mPlan, mBad, lim, st, here, nextS, dist, pos };
+    renderAstro(eva.nav);
   }
 
   function play() {
@@ -693,6 +695,7 @@
     const end = Math.min(tlScale().Tmax, lastT + 10);   // stop shortly after the crew is home
     const start = eva.T >= end - 0.5 ? 0 : eva.T;
     if (start === 0) { const b = stopById("base"); map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 15), { duration: 0.6 }); }
+    closeDrill();
     eva.playing = true;
     setPlayBtn("pause");
     const t0 = performance.now(), realMs = 32000 * ((end - start) / end);
@@ -710,6 +713,128 @@
     cancelAnimationFrame(eva.raf);
     const P = S.m && S.m.profile;
     setPlayBtn(P && eva.T >= P[P.length - 1].t ? "replay" : "play");
+  }
+
+  /* ---------- bad-day drills: what if it goes wrong right here, right now ----------
+     Each drill pauses the clock and reads the same numbers the three checks use, at the crew's position
+     on the planned walk. Nothing in the plan is changed. The storm warning time is a what-if the user picks. */
+  const DRILLS = [["hurt", "Crewmate hurt here"], ["suit", "Suit alarm here"], ["storm", "Storm warning now"], ["late", "Running late +10 min"]];
+  const drillBtns = () => DRILLS.map(([k, t]) => `<button data-drill="${k}">${t}</button>`).join("");
+  const drill = { type: null, warn: 30, late: 0, line: null };
+  const drillEl = el("div", "pnl drill-card");
+  drillEl.hidden = true; drillEl.setAttribute("role", "dialog"); drillEl.setAttribute("aria-label", "Bad-day drill");
+  document.body.appendChild(drillEl);
+  $("#live").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
+  $("#aDrills").innerHTML = drillBtns();
+  $("#aDrills").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
+  drillEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.warn) { drill.warn = +b.dataset.warn; renderDrill(); }
+    else if (b.dataset.late === "more") { drill.late += 10; renderDrill(); }
+    else if (b.dataset.late === "clear") { drill.late = 0; closeDrill(); }
+    else if (b.dataset.close != null) closeDrill();
+  });
+
+  // The way home from a point: walk downhill on the walk-home time layer until base camp.
+  // The layer stores no path, so this follows the smallest walk-home time from cell to cell. Drawn only if it reaches base.
+  function wayHome(pos) {
+    const g = S.m && S.m.grid, f = zone.field;
+    if (!g || !f) return null;
+    const c0 = Math.floor((pos[1] - g.lon0) / g.dlon), r0 = Math.floor((g.lat1 - pos[0]) / g.dlat);
+    if (r0 < 0 || r0 >= g.h || c0 < 0 || c0 >= g.w) return null;
+    let i = r0 * g.w + c0;
+    if (f[i] === 65535) return null;
+    const pts = [pos], seen = new Set([i]);
+    for (let n = 0; n < 40000 && f[i] > 0; n++) {
+      const r = (i / g.w) | 0, c = i % g.w;
+      let best = -1, bv = f[i], tie = -1;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr, cc = c + dc;
+        if (rr < 0 || rr >= g.h || cc < 0 || cc >= g.w) continue;
+        const j = rr * g.w + cc;
+        if (f[j] < bv) { bv = f[j]; best = j; } else if (f[j] === f[i] && !seen.has(j) && tie < 0) tie = j;
+      }
+      if (best < 0) best = tie;   // the layer is stored in steps of 6 s, so neighbours can tie
+      if (best < 0) break;
+      i = best; seen.add(i);
+      if (n % 2 === 0) pts.push([g.lat1 - (((i / g.w) | 0) + 0.5) * g.dlat, g.lon0 + ((i % g.w) + 0.5) * g.dlon]);
+    }
+    if (f[i] > 10) return null;   // did not come within a minute of base camp
+    const b = stopById("base"); pts.push([b.lat, b.lon]);
+    return pts;
+  }
+
+  function openDrill(type) {
+    if (!S.m || !eva.nav || eva.nav.st.after) return;
+    if (eva.playing) pause();
+    if (type === "late") drill.late = drill.type === "late" ? drill.late + 10 : 10; else drill.late = 0;
+    drill.type = type;
+    if (drill.line) { map.removeLayer(drill.line); drill.line = null; }
+    if (type !== "late") {
+      const pts = wayHome(eva.nav.pos);
+      if (pts) drill.line = L.polyline(pts, { color: "#7dd3fc", weight: 3.5, dashArray: "2 8", lineCap: "round", interactive: false }).addTo(map);
+    }
+    renderDrill();
+  }
+  function closeDrill() {
+    drill.type = null; drill.late = 0;
+    drillEl.hidden = true;
+    if (drill.line) { map.removeLayer(drill.line); drill.line = null; }
+  }
+  function renderDrill() {
+    const n = eva.nav, m = S.m;
+    if (!n || !drill.type) return;
+    const wb = m.walkback, bf = wb.bad ? wb.bad.factor : 2, homeBy = wb.bad ? wb.bad.budget_min : wb.budget_min;
+    const where = n.here ? `at ${shortName(n.here)}` : `on the way to ${shortName(n.nextS)}`;
+    const row = (k, v) => `<div class="dr"><span>${k}</span><b>${v}</b></div>`;
+    const verdict = (ok, txt) => `<div class="dv ${ok ? "ok" : "bad"}">${ok ? "MAKES IT" : "DOES NOT MAKE IT"}<small>${txt}</small></div>`;
+    const spareTxt = (x, unit = "to spare") => (x >= 0 ? `${fmtMin(x)} ${unit}` : `${fmtMin(x)} short`);
+    let title, body, note;
+    if (drill.type === "hurt") {
+      const left = homeBy - n.T, half = bf * n.back, spare = left - half;
+      title = "Crewmate hurt";
+      body = row("Walk home at normal pace", fmtMin(n.back)) + row(`At half speed, helping the hurt crewmate`, fmtMin(half))
+        + row(`Time left to be home by T+${hm(homeBy)}`, fmtMin(left)) + verdict(spare >= 0, spareTxt(spare));
+      note = 'Same rule as the "If something goes wrong" check. The reserve stays untouched.';
+    } else if (drill.type === "suit") {
+      const spare = n.lim - n.back;
+      title = "Suit alarm";
+      body = row("Walk home from here", fmtMin(n.back)) + row("Backup oxygen for the walk", `${n.lim} min`) + verdict(spare >= 0, spareTxt(spare, "of backup oxygen to spare"));
+      note = 'Same rule as the "Suit failure" check: 1 h of backup oxygen, about 10 min of it to get inside.';
+    } else if (drill.type === "storm") {
+      const spare = drill.warn - n.back;
+      title = "Storm warning";
+      body = `<div class="dr"><span>Warning time (what-if, you pick)</span><span class="dpick">${[15, 30, 60].map((w) => `<button data-warn="${w}" class="${w === drill.warn ? "on" : ""}">${w} min</button>`).join("")}</span></div>`
+        + row("Walk home from here", fmtMin(n.back)) + verdict(spare >= 0, spare >= 0 ? `inside ${fmtMin(spare)} before the warning time runs out` : `${fmtMin(spare)} short of shelter`);
+      note = "A what-if, not a forecast: real warning times depend on the storm. The live NASA DONKI notices are under Conditions.";
+    } else {
+      const D = drill.late, P = m.profile, tl = m.timeline || [], lastT = P[P.length - 1].t;
+      let worst = Infinity;
+      for (const p of P) if (p.t >= n.T - 1e-6) worst = Math.min(worst, wb.budget_min - (p.t + D + p.back), homeBy - (p.t + D + bf * p.back));
+      let rows = "", fix = "";
+      for (let i = 1; i < tl.length - 1; i++) {
+        const t = tl[i];
+        if (t.depart_min < n.T - 1e-6) continue;   // already left this stop
+        const s = stopById(m.order[i]), dep = t.depart_min + D, spare = leaveBy(t) - dep;
+        rows += row(`Leave ${esc(shortName(s))}`, `T+${hm(dep)} <small>leave by T+${hm(leaveBy(t))} · ${spare >= 0 ? `${fmtMin(spare)} to spare` : `${fmtMin(spare)} late`}</small>`);
+        if (spare < 0 && !fix) {
+          const need = Math.ceil(-spare), stay = t.depart_min - Math.max(t.arrive_min, n.T);
+          fix = stay <= 0 ? `Leave ${esc(shortName(s))} now: the delay has used up the stop and ${need} min more.`
+            : need <= stay ? `Shorten the stop at ${esc(shortName(s))} by ${need} min (${fmtMin(stay)} planned there), or drop it.`
+            : `Shortening ${esc(shortName(s))} is not enough (${fmtMin(stay)} planned there, ${need} min to win back). Drop it.`;
+        }
+      }
+      title = `Running late +${D} min`;
+      body = rows + row("Back at base camp", `T+${hm(lastT + D)} <small>plan T+${hm(lastT)}</small>`)
+        + verdict(worst >= 0, worst >= 0 ? `tightest moment still has ${fmtMin(worst)} to spare` : fix || `${fmtMin(worst)} short and no stop left to drop: head straight home.`)
+        + `<div class="dbtns"><button data-late="more">+10 min more</button><button data-late="clear">Clear the delay</button></div>`;
+      note = "The delay is added to the rest of the plan. Leave-by times do not move: they come from the terrain and the suit time.";
+    }
+    drillEl.className = `pnl drill-card${astro.open ? " in-astro" : ""}`;
+    drillEl.innerHTML = `<div class="dh"><span class="lbl">Drill · T+${hm(n.T)} · ${esc(where)}</span><button class="x" data-close aria-label="Close the drill">&times;</button></div>
+      <div class="dt">${title}</div>${body}<p class="dn">${note}</p><button class="ghost" data-close>Back to the walk</button>`;
+    drillEl.hidden = false;
   }
 
   /* ---------- v2: Astronaut view, the crew's own screen ----------
@@ -1106,6 +1231,7 @@
         <tr><td>Airlock time</td><td>${a.airlock_min || 0} min</td><td>The <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> timeline has 45 min to get out, 30 min of dust removal and 45 min to get back in</td></tr></table>
       <p style="font-size:12px;color:#6f7680">Half speed after an accident is our planning assumption, not a NASA flight rule. The clock (T+) starts at the first step outside; the airlock time is taken off the time the crew has.</p>
       <p id="bpHow"><b>Breaking point.</b> Under each check the app says how much slower the whole walk could be before that check fails. It is worked out from the same walking times: every walking time and every walk-home time grows as the crew slows down, and the time at the stops stays the same. Percentages are rounded down and speeds up. It is a derived number, not a measurement.</p>
+      <p id="drillHow"><b>Drills.</b> While the clock is in use, four buttons ask what happens if it goes wrong right there: a crewmate is hurt, a suit alarm, a storm warning, or the crew is running late. Each one pauses the clock and uses the same numbers as the three checks, read at the crew's position on the planned walk. The dotted line is the way home, traced on the walk-home layer. The storm warning time is a what-if the user picks, not a forecast.</p>
       <h3 id="tests">Real-world tests</h3>
       ${rc ? `<p><b>Slope map vs Perseverance's tilt sensor.</b> The rover logs how far it is tilted at every stop. Its sensor never sees our map. At ${rc.n} stops inside our area our slope agrees with the measured tilt: ${rc.slope_mae_deg}° average difference, ${rc.within_3deg_pct} % within 3°, correlation ${rc.slope_r}.</p>${scatterSvg(rc.pairs)}
       <p><b>Height.</b> Our terrain height matches the rover's logged elevation to ${rc.elev_mae_m} m on average. The rover's positions are tied to the same orbital maps, so this mainly confirms the layers line up.</p>` : ""}

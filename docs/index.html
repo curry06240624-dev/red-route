@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
@@ -95,6 +95,7 @@
   <section class="astro-track" id="aTrack" aria-label="Walk progress; click to jump in time"></section>
   <footer class="astro-ctl">
     <button class="cta big" id="aPlay"><span class="tri"></span><span id="aPlayTxt">Walk the plan</span></button>
+    <div class="astro-drills" id="aDrills" role="group" aria-label="Bad-day drills: what if it goes wrong right here"></div>
     <small class="astro-note">Simulated from the plan. On a real EVA the suit's position and clock would drive this screen.</small>
   </footer>
 </div>
@@ -114,6 +115,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

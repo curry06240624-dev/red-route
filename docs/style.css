@@ -343,3 +343,30 @@ body.astro-on { overflow: hidden; }
   .astro { row-gap: 10px; padding-top: 12px; padding-bottom: 12px; }
   .astro-track { height: 60px; }
 }
+
+/* bad-day drills: buttons in the live strip and the astronaut view, and the card they open */
+.live > .drills { flex-basis: 100%; border-left: 0; border-top: 1px solid var(--line); padding: 6px 8px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.drills button, .astro-drills button { background: none; border: 1px solid var(--line); color: var(--text); padding: 5px 9px; font: 600 11px var(--cond); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.drills button:hover, .astro-drills button:hover { border-color: var(--route); color: #fff; }
+.astro-ctl { flex-wrap: wrap; }
+.astro-drills { display: flex; gap: 10px; flex-wrap: wrap; }
+.astro-drills button { min-height: 52px; padding: 0 16px; font-size: 13px; border-color: rgba(255,255,255,.45); }
+.drill-card { left: 50%; top: 196px; transform: translateX(-50%); z-index: 3200; width: min(440px, calc(100vw - 28px)); padding: 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); background: rgba(9,10,12,.97); }
+.drill-card[hidden] { display: none; }
+.drill-card.in-astro { top: 50%; transform: translate(-50%, -50%); }
+.drill-card .dh { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.drill-card .x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.drill-card .dt { font: 700 20px Barlow; letter-spacing: .03em; margin: 4px 0 8px; text-transform: uppercase; }
+.drill-card .dr { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line-2); font-size: 13.5px; }
+.drill-card .dr b { font: 600 15px Barlow; text-align: right; white-space: nowrap; }
+.drill-card .dr small { display: block; font: 400 11.5px Barlow; color: var(--muted); white-space: normal; }
+.drill-card .dv { margin: 10px 0 8px; padding: 9px 12px; font: 700 18px var(--cond); letter-spacing: .1em; border: 1px solid; }
+.drill-card .dv small { display: block; font: 500 13px Barlow; letter-spacing: 0; margin-top: 2px; }
+.drill-card .dv.ok { color: var(--safe); border-color: var(--safe); }
+.drill-card .dv.bad { color: var(--bad); border-color: var(--bad); }
+.drill-card .dn { font-size: 11.5px; color: var(--muted); margin: 0 0 10px; }
+.drill-card .dpick, .drill-card .dbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.drill-card .dbtns { margin-bottom: 8px; }
+.drill-card .dpick button, .drill-card .dbtns button { background: none; border: 1px solid var(--line); color: var(--text); padding: 4px 9px; font: 600 11.5px var(--cond); letter-spacing: .08em; cursor: pointer; }
+.drill-card .dpick button.on { border-color: var(--route); color: var(--route); }
+@media (max-width: 900px) { .drill-card { top: auto; bottom: 12px; } .drill-card.in-astro { top: 50%; bottom: auto; } }
