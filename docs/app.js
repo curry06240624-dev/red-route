@@ -1163,10 +1163,12 @@
       // walking direction = the route over the next 25 m; the map turns so this points up
       const near = along > 5 ? pointAtDistance(Math.min(legEnd, st.d + 25)) : tgt;
       const rot = steerAstroMap(bearing(pos, near));
-      $("#aNextLbl").textContent = nextS.id === "base" ? "Heading home" : "Next stop";
-      $("#aNext").textContent = shortName(nextS).toUpperCase();
-      $("#aNextSub").textContent = `${along >= 1000 ? `${(along / 1000).toFixed(2)} km` : `${Math.round(along)} m`} along the route · ${compass(brg)}`;
-      arrow.style.display = "";
+      const turnBack = cls === "bad" && nextS.id !== "base";   // TURN BACK NOW: the way to go is home, not the next stop
+      $("#aNextLbl").textContent = turnBack ? "Turn back to" : nextS.id === "base" ? "Heading home" : "Next stop";
+      $("#aNext").textContent = turnBack ? "BASE CAMP" : shortName(nextS).toUpperCase();
+      $("#aNextSub").textContent = turnBack ? `Walk home: ${fmtMin(back)}. Do not go on to ${shortName(nextS)}.`
+        : `${along >= 1000 ? `${(along / 1000).toFixed(2)} km` : `${Math.round(along)} m`} along the route · ${compass(brg)}`;
+      arrow.style.display = turnBack ? "none" : "";
       arrow.style.transform = `rotate(${brg - rot}deg)`;   // relative to the map: up = straight ahead, leans before a bend
     }
     updateAstroMap(pos, aheadPts);
