@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <div id="map" aria-label="Map of Jezero Crater, Mars"></div>
@@ -86,8 +86,8 @@
     <div class="amap-credit">HiRISE: NASA/JPL/UArizona · relief: ESA/DLR/FU Berlin + NASA · via Mars Trek</div>
   </section>
   <section class="astro-grid">
-    <div class="astro-tile"><span class="lbl">Walk home</span><b id="aBack">0 MIN</b>
-      <div class="o2bar" id="aO2bar"><i id="aO2"></i><span class="o2mark"></span></div><small id="aO2txt"></small></div>
+    <div class="astro-tile"><span class="lbl">Walk home<span class="stag-slot" data-stag="d:how-checks"></span></span><b id="aBack">0 MIN</b>
+      <div class="o2bar" id="aO2bar"><i id="aO2"></i><span class="o2mark"></span></div><small><span id="aO2txt"></span><span class="stag-slot" data-stag="a:how-numbers"></span></small></div>
     <div class="astro-tile"><span class="lbl" id="aNextLbl">Next stop</span>
       <div class="astro-next"><svg id="aArrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 L33 35 L20 27 L7 35 Z" fill="#fff"/></svg><b id="aNext"></b></div>
       <small id="aNextSub"></small></div>
@@ -115,6 +115,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

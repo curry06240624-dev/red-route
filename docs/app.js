@@ -87,6 +87,22 @@
     return best ? best.name : "the route";
   }
 
+  /* ---------- source tags: say where each number comes from ----------
+     N = NASA data (measured by a NASA mission), D = derived (worked out by Red Route from that data and the
+     planning numbers), A = assumed (a planning number we set; its source is listed). A click opens the
+     matching part of "How it works". */
+  const STAG = { n: ["N", "NASA data", "Measured by a NASA mission"], d: ["D", "Derived", "Worked out by Red Route from NASA data and the planning numbers"],
+    a: ["A", "Assumed", "A planning number we set. Its source is listed"] };
+  const stag = (k, how, full) => `<button type="button" class="stag ${k}${full ? " full" : ""}" data-how="${how}" title="${STAG[k][1]}: ${STAG[k][2].toLowerCase()}. Click for the source." aria-label="${STAG[k][1]}. Open the source."><b>${STAG[k][0]}</b><span>${STAG[k][1].slice(1)}</span></button>`;
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".stag");
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    $("#about").style.zIndex = astro.open ? "3300" : "";   // the astronaut view sits above normal dialogs
+    openModal("about");
+    setTimeout(() => document.getElementById(b.dataset.how)?.scrollIntoView({ block: "start" }), 50);
+  }, true);
+
   /* ---------- breaking point (DERIVED): how much slower the whole walk can be before a check fails ----------
      Every walking time and every walk-home time scales with 1 / speed; the time at the stops does not.
      So for each point of the walk the slowest pace that still passes has a closed form, and the check
@@ -152,10 +168,11 @@
 
   function renderChecks() {
     const m = S.m, t = m.totals, rc = m.rover_check, air = m.walkback.airlock_min || 0;
-    const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span>${c.bp ? `<span class="bp" data-src="derived">${esc(c.bp)}</span>` : ""}</div>`).join("");
+    const rows = getChecks(m).map((c) => `<div class="chk"><span class="k">${c.name}${stag("d", "how-checks")}</span><span class="v ${c.ok ? "ok" : "bad"}">${esc(c.val)}</span><span class="s">${esc(c.sub)}</span>${c.bp ? `<span class="bp" data-src="derived">${esc(c.bp)}${stag("d", "bpHow")}</span>` : ""}</div>`).join("");
     $("#checks").innerHTML = `<div class="lbl-lg"><span class="gnum" aria-hidden="true">1</span>Get-home checks</div>${rows}
-      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}<br>CREW OF TWO · EV1 AND EV2 WALK TOGETHER</div>
-      ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots. <a href="#" id="proofLink">See the test</a></div>` : ""}
+      <div class="mission">${t.dist_km.toFixed(1)} KM · +${t.gain_m} M · MAX ${t.max_slope.toFixed(1)}°<br>${fmtMin(t.eva_h * 60).toUpperCase()} OUTSIDE${air ? ` · ${fmtMin(t.eva_h * 60 + air).toUpperCase()} IN THE SUIT` : ""}${stag("d", "how-route")}<br>CREW OF TWO · EV1 AND EV2 WALK TOGETHER</div>
+      ${rc ? `<div class="proof">Slope map vs Perseverance's tilt sensor: ${rc.slope_mae_deg}° average difference at ${rc.n} spots.${stag("n", "tests")} <a href="#" id="proofLink">See the test</a></div>` : ""}
+      <div class="stag-key">${stag("n", "how-data", 1)} measured by a NASA mission ${stag("d", "how-route", 1)} worked out from it ${stag("a", "how-numbers", 1)} a planning number we set. Click a tag for its source.</div>
       <hr class="r">`;
     const pl = $("#proofLink");
     if (pl) pl.onclick = (e) => { e.preventDefault(); openModal("about"); setTimeout(() => $("#tests")?.scrollIntoView(), 50); };
@@ -167,7 +184,7 @@
 
   function renderStopList() {
     const m = S.m, tl = m.timeline || [];
-    let html = '<div class="lbl-lg" style="display:flex;justify-content:space-between"><span>Route stops</span><span>Leave by</span></div><ul class="stops">';
+    let html = '<div class="lbl-lg" style="display:flex;justify-content:space-between"><span>Route stops</span><span>Leave by${stag("d", "how-checks")}</span></div><ul class="stops">';
     m.order.forEach((id, i) => {
       const s = stopById(id), last = i === m.order.length - 1, t = tl[i];
       if (last) {
@@ -236,7 +253,7 @@
       const link = v.n && /^https:\/\//.test(v.n.url || "") ? v.n.url : "";
       const a = link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${v.cls === "ok" ? "latest notice" : "the notice"}</a>` : "";
       if (live) {
-        html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">${esc(v.sub)} Live NASA DONKI notices${a}.</span></div>`;
+        html += `<div class="cond-row"><span>Space weather${stag("n", "how-data")}</span><b class="${v.cls}">${v.word}</b><span class="s">${esc(v.sub)} Live NASA DONKI notices${a}.</span></div>`;
       } else if (v.cls !== "ok") {   // a saved warning is still worth showing, with its date
         html += `<div class="cond-row"><span>Space weather</span><b class="${v.cls}">${v.word}</b><span class="s">As of ${esc(saved)}: ${esc(v.sub)} Saved NASA DONKI notices; ${S.donki.failed ? "the live feed did not answer" : "checking the live feed"}${a}.</span></div>`;
       } else if (S.donki.failed) {   // never show a green CLEAR from old data
@@ -249,10 +266,10 @@
       const w = S.meda.sols[S.meda.sols.length - 1];
       const [rh, rm] = w.sunrise.split(":").map(Number), [sh, sm] = w.sunset.split(":").map(Number);
       const day = ((sh * 60 + sm) - (rh * 60 + rm) - 120) / 60, fits = day >= S.m.totals.eva_h;
-      html += `<div class="cond-row"><span>Daylight</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
+      html += `<div class="cond-row"><span>Daylight${stag("n", "how-data")}</span><b class="${fits ? "ok" : "warn"}">${fits ? "OK" : "TOO LONG"}</b><span class="s">${day.toFixed(1)} h usable vs ${S.m.totals.eva_h.toFixed(1)} h outside · ${w.min_temp}°C to ${w.max_temp}°C · latest available Perseverance MEDA data (${medaLatest()})</span></div>`;
     }
     const dose = walkDoseUGy(S.m);
-    html += `<div class="cond-row" id="radRow"><span>Radiation</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value: Jezero sits higher, so a little more. For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
+    html += `<div class="cond-row" id="radRow"><span>Radiation${stag("d", "how-numbers")}</span><b>about ${Math.round(dose)} µGy</b><span class="s">Quiet-day dose for this walk's ${fmtMin(S.m.totals.eva_h * 60)} outside: about ${Math.round(dose)} microgray, from the average Curiosity's RAD measured at Gale Crater, ${RAD.gale_mgy_day} mGy a day (<a href="${RAD.paper}" target="_blank" rel="noopener">Hassler et al. 2014</a>). A Gale value: Jezero sits higher, so a little more. For scale, RAD measured about ${RAD.storm_ugy.toLocaleString("en-US")} microgray in the May 2024 solar storm (<a href="${RAD.storm}" target="_blank" rel="noopener">NASA</a>). Shown for scale, not a pass or fail.</span></div>`;
     $("#conditions").innerHTML = html;
   }
 
@@ -315,14 +332,14 @@
         <div class="src">Perseverance, sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m from this stop` : ""} · ${esc(photoCredits(photos))}</div>`;
     }
     if (tr) {
-      html += `<hr class="r"><div class="lbl-lg">Terrain within 50 m</div><table class="tbl">
+      html += `<hr class="r"><div class="lbl-lg">Terrain within 50 m${stag("n", "how-data", 1)}</div><table class="tbl">
         <tr><td>Slope, mean / max</td><td>${tr.slope_mean}° / ${tr.slope_max}°</td></tr>
         <tr><td>Roughness (RMS)</td><td>${tr.rough_rms} m</td></tr>
         <tr><td>Elevation</td><td>${Math.round(tr.elev_min)} to ${Math.round(tr.elev_max)} m</td></tr>
         <tr><td>No-go ground (&gt; ${m.assumptions.max_slope_deg}°)</td><td class="${tr.nogo_pct > 10 ? "warn" : ""}">${tr.nogo_pct} %</td></tr></table>`;
     }
     if (s.notes && !s.moved) {
-      html += `<hr class="r"><div class="lbl-lg">What Perseverance did here</div><p class="note">${esc(s.notes.text)}</p>
+      html += `<hr class="r"><div class="lbl-lg">What Perseverance did here${stag("n", "how-data", 1)}</div><p class="note">${esc(s.notes.text)}</p>
         <div class="src">${s.notes.sources.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join(" · ")}</div>`;
       if (s.id === "base" && s.site_check) {
         html += `<p class="note">Base camp was placed here, on top of the delta, so that the loop fits the time rules. It is not checked as a landing site: within ${s.site_check.radius_m} m the ground reaches ${s.site_check.slope_max}°.</p>`;
@@ -330,7 +347,7 @@
     } else if (s.moved) {
       html += `<hr class="r"><p class="note">You moved this stop. The photos show where Perseverance stopped on sol ${s.rover_sol}${awayM > 30 ? `, ${Math.round(awayM)} m away` : ""}.</p>`;
     }
-    html += `<hr class="r"><div class="lbl-lg">Get home from here</div><table class="tbl">`;
+    html += `<hr class="r"><div class="lbl-lg">Get home from here${stag("d", "how-checks", 1)}</div><table class="tbl">`;
     if (s.id === "base") {
       html += `<tr><td>Safe haven</td><td>Base camp</td></tr><tr><td>Start</td><td>T+0:00</td></tr>${t ? "" : ""}`;
       const ret = (m.timeline || [])[m.order.length - 1];
@@ -751,6 +768,7 @@
   document.body.appendChild(drillEl);
   $("#live").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
   $("#aDrills").innerHTML = drillBtns();
+  document.querySelectorAll(".stag-slot").forEach((e) => { const [k, how] = e.dataset.stag.split(":"); e.innerHTML = stag(k, how); });
   $("#aDrills").addEventListener("click", (e) => { const b = e.target.closest("[data-drill]"); if (b) openDrill(b.dataset.drill); });
   drillEl.addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
@@ -1008,7 +1026,7 @@
     $("#aStatus").className = `astro-status ${cls}`;
     $("#aWord").textContent = word;
     $("#aSpare").textContent = spare;
-    $("#aBad").innerHTML = st.after ? "" : `If EV2 is hurt and EV1 helps: <b class="${mBad < 0 ? "bad" : ""}">${fmtMin(mBad)} ${mBad < 0 ? "short" : "to spare"}</b>`;
+    $("#aBad").innerHTML = st.after ? "" : `If EV2 is hurt and EV1 helps: <b class="${mBad < 0 ? "bad" : ""}">${fmtMin(mBad)} ${mBad < 0 ? "short" : "to spare"}</b>${stag("d", "how-checks")}${stag("a", "how-numbers")}`;
     // walk home, measured against the 50 min of backup oxygen
     $("#aBack").textContent = `${Math.round(back)} MIN`;
     $("#aBack").className = back > lim ? "bad" : "";
@@ -1064,7 +1082,7 @@
 
   function renderPlanPanel(m) {
     const a = m.assumptions;
-    const sl = (id, label, min, max, step, val, unit) => `<div class="sl"><label for="sl-${id}">${label}<output>${val}${unit}</output></label>
+    const sl = (id, label, min, max, step, val, unit) => `<div class="sl"><label for="sl-${id}">${label}${stag("a", "how-numbers")}<output>${val}${unit}</output></label>
       <input type="range" id="sl-${id}" data-k="${id}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
     const box = $("#planPanel");
     box.innerHTML = `<button class="x" data-close="planPanel" aria-label="Close">&times;</button><div class="lbl-lg">Plan your EVA</div>
@@ -1238,17 +1256,18 @@
     $("#aboutBody").innerHTML = `<h2>How Red Route works</h2>
       <p>Red Route plans a walking EVA in Jezero Crater and checks, at every minute of the walk, that the crew can still get home.</p>
       <p>The plan is for a crew of two, EV1 and EV2, who walk together and stay together.</p>
-      <h3>The get-home checks</h3>
+      <p id="how-tags"><b>Tags.</b> Small letters next to the numbers say where each one comes from. <b>N</b> = NASA data: measured by a NASA mission (terrain, photos, rover tilt, weather, space weather). <b>D</b> = derived: worked out by Red Route from that data and the planning numbers (walking times, margins, leave-by times, the get-home zone, breaking points, the dose). <b>A</b> = assumed: a planning number we set, listed below with its source (walking pace, no-go slope, rough-ground factor, suit limit, reserve, airlock time, backup oxygen, half speed).</p>
+      <h3 id="how-checks">The get-home checks</h3>
       <table><tr><th>Check</th><th>Rule</th><th>Where the rule comes from</th></tr>
         <tr><td>Plan fits</td><td>Time so far + walk home at normal pace ≤ ${a.eva_limit_h} h minus ${Math.round(a.reserve * 100)} % reserve minus ${a.airlock_min || 0} min of airlock time (getting out and back in)</td><td>NASA plans about 6 h inside an 8 h suit (<a href="https://www.nasa.gov/wp-content/uploads/2017/02/eva-exp-0042_xeva_system_con_ops_rev_b_final_dtd_10192020_ref_doc.pdf" target="_blank" rel="noopener">EVA-EXP-0042</a>)</td></tr>
         <tr><td>If something goes wrong</td><td>EV2 is hurt and EV1 helps: time so far + walk home at half speed must fit the same time. The reserve stays untouched.</td><td>Our assumption, built on NASA's walk-back idea (<a href="https://ttu-ir.tdl.org/handle/2346/74208" target="_blank" rel="noopener">EVA walk-back limit study</a>) and rescue of a hurt crewmate (<a href="https://ntrs.nasa.gov/citations/20230005461" target="_blank" rel="noopener">NASA NTRS 20230005461</a>)</td></tr>
         <tr><td>Suit failure</td><td>Walk home ≤ ${a.suit_fail_min || 50} min from every point (1 h backup oxygen, ~10 min to get inside)</td><td>NASA sizes walking EVAs on the backup oxygen (<a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a>)</td></tr></table>
-      <h3>How the route is found</h3>
+      <h3 id="how-route">How the route is found</h3>
       <ol><li>Slope and rough ground come from the 1 m HiRISE elevation model of Jezero (USGS, Mars 2020 landing products), corrected for the map projection.</li>
         <li>Each spot gets a walking time: ${a.v_flat_ms} m/s on flat ground, slower on slopes (Tobler's hiking curve), ${a.rough_penalty}× slower on rough ground.</li>
         <li>Ground steeper than ${a.max_slope_deg}° is no-go.</li>
         <li>A least-time path search links the stops. A second search from base camp gives the walk-home time from every spot, which drives all three checks and the green zone.</li></ol>
-      <h3>Planning numbers</h3>
+      <h3 id="how-numbers">Planning numbers</h3>
       <table><tr><th>Number</th><th>Value</th><th>Source</th></tr>
         <tr><td>Suited walking speed</td><td>${a.v_flat_ms} m/s (2 km/h)</td><td>NASA Artemis planning pace (<a href="https://www.nasa.gov/wp-content/uploads/2017/02/eva-exp-0042_xeva_system_con_ops_rev_b_final_dtd_10192020_ref_doc.pdf" target="_blank" rel="noopener">EVA-EXP-0042 Rev B</a>)</td></tr>
         <tr><td>No-go slope</td><td>${a.max_slope_deg}°</td><td>NASA suit requirement is 20°; Apollo crews walked on slopes under 15° (<a href="https://meetingorganizer.copernicus.org/EPSC2024/EPSC2024-196.html" target="_blank" rel="noopener">Iqbal et al. 2024</a>)</td></tr>
@@ -1272,7 +1291,7 @@
         <li>The public MEDA weather summaries end in 2024, so the daylight check uses the latest available sols.</li>
         <li>The radiation number is a quiet-day average measured at Gale Crater, not at Jezero. It is shown for scale and is not checked against a limit.</li>
         <li>Base camp was placed on top of the delta so that the loop fits the time rules. It is not checked as a landing site${sc ? `: the ground is gentle within 50 m (up to ${(base.terrain || {}).slope_max}°), but within ${sc.radius_m} m it reaches ${sc.slope_max}°, and the <a href="https://ntrs.nasa.gov/api/citations/20210026296/downloads/Scoville%20Final%20presentation%20-%20compressed.pptx.pdf" target="_blank" rel="noopener">Artemis III EVA study</a> we cite draws a 100 m landing circle with slopes under 5°` : ""}. The rocket-plume distance from the sample depot is not checked either.</li></ul>
-      <h3>Data</h3>
+      <h3 id="how-data">Data</h3>
       <ul><li>HiRISE 1 m elevation model and 25 cm photo mosaic of Jezero: USGS Astrogeology (Mars 2020 landing products), tiles via NASA JPL Mars Trek.</li>
         <li>CTX and MOLA backgrounds: NASA JPL Mars Trek. ESA Mars Express HRSC + NASA MOLA blended relief (USGS).</li>
         <li>Night heat layer: Mars Odyssey THEMIS night-time infrared mosaic, 100 m pixels (NASA/JPL-Caltech/Arizona State University), tiles via NASA JPL Mars Trek. Context only: it is not used in the route.</li>
