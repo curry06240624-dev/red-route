@@ -11,8 +11,9 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 
 export const SKY_HORIZON = new THREE.Color(0xd8a877);
 export const SKY_ZENITH = new THREE.Color(0x8f6748);
-// The sun's place is fixed for the picture (afternoon, from the west-north-west); it is not worked out from a date.
-export const SUN_DIR = new THREE.Vector3(-0.66, 0.6, -0.36).normalize();
+// The sun's place is fixed for the picture (late afternoon, low in the west-north-west, about 25 degrees up);
+// it is not worked out from a date.
+export const SUN_DIR = new THREE.Vector3(-0.80, 0.42, -0.43).normalize();
 
 /* ---------- ground: grid <-> world. x = metres east of the grid's west edge, z = metres south of its north edge, y = metres above Y0 ---------- */
 export class Ground {
@@ -145,7 +146,9 @@ function makeNoGoTexture(G, maxSlope) {
 export function buildTerrain(scene, G, maxSlope, step) {
   const W = G.W, H = G.H, g = G.g, dem = G.dem;
   const detail = makeDetailTexture();
-  const mat = new THREE.MeshLambertMaterial({ map: makeColourTexture(G) });
+  // fine relief for the light to catch close to the viewer (drawn by code; the real shape comes from the elevation grid)
+  const bump = detail.clone(); bump.repeat.set(G.sizeX / 2.6, G.sizeZ / 2.6); bump.needsUpdate = true;
+  const mat = new THREE.MeshLambertMaterial({ map: makeColourTexture(G), bumpMap: bump, bumpScale: 1.7 });
   const uni = { uDetail: { value: detail }, uDetailRep: { value: new THREE.Vector2(G.sizeX / 5.0, G.sizeZ / 5.0) },
     uNoGo: { value: makeNoGoTexture(G, maxSlope) }, uTint: { value: 1 }, uBlot: { value: 1 } };
   mat.onBeforeCompile = (sh) => {
@@ -222,20 +225,29 @@ export function buildTerrain(scene, G, maxSlope, step) {
 export function buildSky(scene) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
-    uniforms: { uSun: { value: SUN_DIR }, uHorizon: { value: SKY_HORIZON }, uZenith: { value: SKY_ZENITH } },
+    uniforms: { uSun: { value: SUN_DIR }, uHorizon: { value: SKY_HORIZON }, uZenith: { value: SKY_ZENITH }, uTime: { value: 0 } },
     vertexShader: "varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-    fragmentShader: `varying vec3 vDir; uniform vec3 uSun, uHorizon, uZenith;
+    fragmentShader: `varying vec3 vDir; uniform vec3 uSun, uHorizon, uZenith; uniform float uTime;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p *= 2.03; a *= 0.5; } return s; }
       void main(){
         vec3 d = normalize(vDir);
         float h = clamp(d.y, 0.0, 1.0);
-        vec3 col = mix(uHorizon, uZenith, pow(h, 0.5));
-        col = mix(col, uHorizon * 1.04, pow(1.0 - h, 10.0));
         float s = max(dot(d, uSun), 0.0);
-        col += vec3(0.50, 0.58, 0.72) * pow(s, 18.0) * 0.22;      // the cool glow around the sun in Mars dust
-        col += vec3(0.80, 0.86, 0.96) * pow(s, 320.0) * 0.75;
-        col += vec3(1.0, 0.98, 0.94) * smoothstep(0.99990, 0.99996, s);   // the small sun disc
-        if (d.y < 0.0) col = mix(uHorizon, uHorizon * 0.82, clamp(-d.y * 6.0, 0.0, 1.0));
+        vec3 col = mix(uHorizon, uZenith, pow(h, 0.42));
+        col = mix(col, uHorizon * 1.15, pow(1.0 - h, 6.0) * (0.5 + 0.5 * s));          // dust haze low down, most toward the sun
+        vec2 cp = d.xz / (d.y + 0.22);
+        float streak = fbm(cp * vec2(1.3, 3.4) + vec2(uTime * 0.003, 0.0));              // thin high dust
+        col *= 1.0 + 0.16 * (streak - 0.5) * smoothstep(0.02, 0.3, h);
+        col += vec3(0.40, 0.50, 0.70) * pow(s, 8.0) * 0.34;                               // the cool glow around the sun in Mars dust
+        col += vec3(0.70, 0.80, 1.00) * pow(s, 70.0) * 1.1;
+        col += vec3(1.00, 0.96, 0.90) * pow(s, 1200.0) * 8.0;
+        col += vec3(1.00, 0.98, 0.95) * smoothstep(0.99990, 0.99996, s) * 40.0;          // the small sun disc
+        if (d.y < 0.0) col = mix(uHorizon * 1.08, uHorizon * 0.8, clamp(-d.y * 5.0, 0.0, 1.0));
         gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
@@ -246,9 +258,9 @@ export function buildSky(scene) {
 }
 
 export function buildLights(scene) {
-  const hemi = new THREE.HemisphereLight(0xf3dcc0, 0x7d5a42, 1.75);
+  const hemi = new THREE.HemisphereLight(0xf0d2b0, 0x6a4937, 1.25);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff0dc, 2.3);
+  const sun = new THREE.DirectionalLight(0xffdfba, 4.4);
   sun.position.copy(SUN_DIR).multiplyScalar(100);
   scene.add(sun); scene.add(sun.target);
   return { hemi, sun };

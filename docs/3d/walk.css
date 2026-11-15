@@ -41,6 +41,20 @@ body.first #visor { opacity: 1; }
 .lbl-lg { font: 600 12px var(--cond); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 14px 0 8px; }
 .ok { color: var(--safe); } .warn { color: var(--warn); } .bad { color: var(--bad); }
 
+/* the fly-in at the start, and the cinema camera: black bars, a quiet screen */
+#hud { transition: opacity .7s; }
+body.intro #hud, body.intro #labels { opacity: 0; pointer-events: none; }
+.bars i { position: fixed; left: 0; right: 0; height: 0; background: #000; z-index: 18; transition: height .5s; pointer-events: none; }
+.bars i:first-child { top: 0; } .bars i:last-child { bottom: 0; }
+body.cine .bars i, body.intro .bars i { height: 9.5vh; }
+body.cine .tiles, body.cine .mini, body.cine .brand, body.cine .credit, body.cine .site, body.cine .stick, body.cine #labels { display: none; }
+body.cine .status { top: auto; bottom: calc(9.5vh + 14px); left: 18px; transform: none; width: auto; min-width: 250px; max-width: 360px; padding: 6px 14px 8px 12px; background: rgba(9, 10, 12, .5); }
+body.cine .status .word { font-size: 26px; } body.cine .status.warn .word, body.cine .status.bad .word { font-size: 22px; }
+body.cine .status .spare { font-size: 14px; } body.cine .status .hurt { font-size: 12px; }
+body.cine .ai-label { bottom: calc(9.5vh + 14px); left: auto; right: 18px; }
+body.cine .bar { opacity: .55; bottom: calc(2vh); z-index: 30; } body.cine .bar:hover { opacity: 1; }
+body.cine .bar .drill { display: none; }
+
 /* brand */
 .brand { top: 14px; left: 14px; display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 8px; }
 .brand img { display: block; }

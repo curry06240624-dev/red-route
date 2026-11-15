@@ -6,9 +6,10 @@
    Walking speed is the planner's: v_flat x exp(-3.5 tan slope), slower on rough ground (see router.js).
    AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
 import * as THREE from "three";
-import * as P from "./plan.js?v=7";
-import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=7";
-import { Astronaut, loadAstronautModel } from "./crew.js?v=7";
+import * as P from "./plan.js?v=8";
+import { Ground, buildTerrain, buildSky, buildLights, RouteLine, StopMarkers, buildHabitat, SKY_HORIZON, SUN_DIR } from "./world.js?v=8";
+import { Astronaut, loadAstronautModel } from "./crew.js?v=8";
+import { makeFx } from "./fx.js?v=8";
 
 const $ = (s) => document.querySelector(s);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -16,7 +17,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const DEG = Math.PI / 180;
 const ARRIVE_M = 15, LEAVE_M = 25, ON_ROUTE_M = 15;
 const DWELL_RATE = 600;          // while the crew works at a stop, the clock runs this many times faster than real time
-const SPEEDS = [1, 10, 30, 60];
+const SPEEDS = [1, 6, 10, 30, 60];
 const DEFAULT_ORDER = ["base", "depot", "gap", "top", "base"];
 const Q = new URLSearchParams(location.search);
 const TOUCH = window.matchMedia("(pointer: coarse)").matches || Q.get("touch") === "1";
@@ -29,7 +30,7 @@ const S = {
   free: null, nav: null, drill: null, started: false, tenby: false, lastDrag: 0,
 };
 const freshFree = () => ({ leg: 0, hereIdx: -1, worked: {}, working: null, home: false, homeT: null });
-let G, renderer, scene, camera, sky, lights, terrain, routeLine, markers, ev1, ev2, worker = null, planId = 0, workerReady = false;
+let G, renderer, scene, camera, sky, lights, terrain, routeLine, markers, ev1, ev2, fx = null, worker = null, planId = 0, workerReady = false;
 const labels = [];
 
 /* ---------- loading ---------- */
@@ -69,17 +70,18 @@ function setLegEnds() { S.legEnd = []; for (const p of S.m.profile) S.legEnd[p.l
 function initScene() {
   const canvas = $("#view");
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.6 : 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TOUCH ? 1.5 : 1.75));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.00030);
+  scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.00033);
   camera = new THREE.PerspectiveCamera(62, 1, 0.45, 12000);
   camera.rotation.order = "YXZ";
   sky = buildSky(scene);
   lights = buildLights(scene);
   const sh = lights.sun.shadow;
-  lights.sun.castShadow = true; sh.mapSize.set(1024, 1024); sh.camera.near = 1; sh.camera.far = 80;
-  sh.camera.left = -9; sh.camera.right = 9; sh.camera.top = 9; sh.camera.bottom = -9; sh.bias = -0.0015; sh.normalBias = 0.04;
+  lights.sun.castShadow = true; sh.mapSize.set(2048, 2048); sh.camera.near = 1; sh.camera.far = 160;
+  sh.camera.left = -26; sh.camera.right = 26; sh.camera.top = 26; sh.camera.bottom = -26; sh.bias = -0.0006; sh.normalBias = 0.06;
   terrain = buildTerrain(scene, G, S.m.assumptions.max_slope_deg, 1);
   terrain.loadOrtho("assets/jezero_hirise_ortho.jpg?v=1", Math.min(TOUCH ? 2048 : 4096, renderer.capabilities.maxTextureSize))
     .then(() => { S.ortho = true; }).catch((e) => console.warn("The HiRISE ground picture did not load; using colours drawn by code.", e));
@@ -90,13 +92,17 @@ function initScene() {
   buildHabitat(scene, G, b.lat, b.lon);
   ev1 = new Astronaut(scene, 0xff6a3d); ev2 = new Astronaut(scene, 0x38bdf8);
   refreshStops();
+  // the film look needs a high-range drawing surface; without one the picture is drawn directly
+  const hdrOk = renderer.capabilities.isWebGL2 && (renderer.extensions.has("EXT_color_buffer_float") || renderer.extensions.has("EXT_color_buffer_half_float"));
+  if (Q.get("fx") !== "0" && hdrOk) { try { fx = makeFx(renderer, scene, camera); } catch (e) { console.warn("No film look on this device.", e); fx = null; } }
   resize();
   window.addEventListener("resize", resize);
 }
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
-  camera.aspect = w / h; camera.fov = w < h ? 74 : 62; camera.updateProjectionMatrix();
+  if (fx) fx.setSize(w, h, renderer.getPixelRatio());
+  camera.aspect = w / h; camera.updateProjectionMatrix();
   routeLine.setResolution(w, h);
 }
 
@@ -197,7 +203,7 @@ function resetToStart() {
   const ahead = P.pointAtDistance(S.route, 12);
   S.heading = P.bearing([b.lat, b.lon], ahead); S.yaw = S.heading; S.lookOff = 0; S.pitch = -4;
 }
-function start(mode) {
+function start(mode, flyIn = false) {
   S.started = true;
   $("#loader").classList.add("done"); document.body.classList.remove("loading");
   $("#hud").hidden = false;
@@ -208,6 +214,7 @@ function start(mode) {
   else { S.mode = "free"; toast(TOUCH ? "Use the stick to walk. Drag to look around." : "W A S D to walk. Drag the mouse to look around.", 6000); }
   if (Q.get("t") != null) jump(parseFloat(Q.get("t")), Q.get("play") === "1");
   if (Q.get("menu") === "1") toggleMenu(true);
+  if (flyIn || Q.get("intro") === "1") { startIntro(); S.introFrom = camFrom.clone(); }
   if (Q.get("drill")) setTimeout(() => openDrill(Q.get("drill")), 400);
   syncButtons();
 }
@@ -230,12 +237,21 @@ function enterFree() {
   S.free = F; S.mode = "free"; S.playing = false; S.yaw = S.heading + S.lookOff; S.lookOff = 0;
   syncButtons(); S.hudKey = "";
 }
+const VIEWS = ["first", "third", "cine"], VIEW_NAME = { first: "First person", third: "Third person", cine: "Cinema camera" };
 function setView(v) {
+  const was = S.view;
   S.view = v;
   document.body.classList.toggle("first", v === "first");
-  $("#bView").textContent = v === "first" ? "Third person" : "First person";
+  document.body.classList.toggle("cine", v === "cine");
+  $("#bView").textContent = VIEW_NAME[VIEWS[(VIEWS.indexOf(v) + 1) % VIEWS.length]];
   if (v === "third" && S.pitch > -6) S.pitch = -12;
   if (v === "first" && S.pitch < -8) S.pitch = -4;
+  if (v === "cine") {   // a film needs a calmer pace: slow the time speed while the cinema camera runs
+    S.cine = { i: 0, t: 0, fixed: null };
+    if (was !== "cine") { S.speedBefore = S.speed; S.speed = 6; }
+  } else if (was === "cine" && S.speedBefore) { S.speed = S.speedBefore; S.speedBefore = 0; }
+  S.camSnap = true;
+  syncButtons();
 }
 function syncButtons() {
   const on = S.mode === "plan" && S.playing;
@@ -253,8 +269,10 @@ function initInput() {
   window.addEventListener("keydown", (e) => {
     if (e.target.closest && e.target.closest("input, textarea")) return;
     if (!S.started || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (S.intro) S.intro.t = Math.max(S.intro.t, S.intro.dur - 0.8);
     if (MOVE[e.code]) { keys.add(e.code); e.preventDefault(); }
-    else if (e.code === "KeyV") setView(S.view === "first" ? "third" : "first");
+    else if (e.code === "KeyV") setView(VIEWS[(VIEWS.indexOf(S.view) + 1) % VIEWS.length]);
+    else if (e.code === "KeyC") setView(S.view === "cine" ? "third" : "cine");
     else if (e.code === "Space") { e.preventDefault(); $("#bPlan").click(); }
     else if (e.code === "Escape") { closeDrill(); toggleMenu(false); }
   });
@@ -263,7 +281,7 @@ function initInput() {
   const cv = $("#view");
   let drag = null;
   const capture = (el, id) => { try { el.setPointerCapture(id); } catch (err) { /* the pointer is already gone */ } };
-  cv.addEventListener("pointerdown", (e) => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; capture(cv, e.pointerId); cv.classList.add("drag"); });
+  cv.addEventListener("pointerdown", (e) => { if (S.intro) S.intro.t = Math.max(S.intro.t, S.intro.dur - 0.8); drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; capture(cv, e.pointerId); cv.classList.add("drag"); });
   cv.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const k = e.pointerType === "touch" ? 0.28 : 0.2, dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k;
@@ -322,7 +340,7 @@ function update(dt) {
     if (inp.len > 0.15) { enterFree(); }
     else {
       const lastT = m.profile[m.profile.length - 1].t;
-      if (S.playing) {
+      if (S.playing && !S.intro) {
         const st = P.stateAt(m, S.T);
         S.T = Math.min(lastT + 0.01, S.T + (dt * (st.gap ? Math.max(S.speed, DWELL_RATE) : S.speed)) / 60);
         if (S.T >= lastT) { S.playing = false; syncButtons(); }
@@ -378,21 +396,82 @@ function update(dt) {
   const hd2 = gap > 0.4 && !(moving > 0.05) ? (Math.atan2(tx - ox, -(tz - oz)) / DEG + 360) % 360 : S.heading;
   ev2.place(nx2, G.height(nx2, nz2), nz2, turn(ev2.hdg || S.heading, hd2, Math.min(1, dt * 6)));
   ev2.update(dt, ev2moving ? 1 : 0, rate);
-  ev1.root.visible = S.view === "third";
-  // camera
-  const yaw = S.yaw * DEG, pit = S.pitch * DEG;
-  S.bob = (S.bob || 0) + dt * 7.5 * (moving > 0.05 ? 1 : 0);
-  if (S.view === "first") camera.position.set(S.pos.x, y + 1.62 + (moving > 0.05 ? Math.sin(S.bob) * 0.022 : 0), S.pos.z);
-  else {
-    const back = 5.4, fx = Math.sin(yaw) * Math.cos(pit), fy = Math.sin(pit), fz = -Math.cos(yaw) * Math.cos(pit);
-    let cx = S.pos.x - fx * back, cy = y + 1.75 - fy * back, cz = S.pos.z - fz * back;
-    const gy = G.height(cx, cz) + 0.7; if (cy < gy) cy = gy;
-    camera.position.set(cx, cy, cz);
-  }
-  camera.rotation.set(pit, -yaw, 0);
+  placeCamera(dt, y, moving);
   sky.position.copy(camera.position);
-  lights.sun.position.set(S.pos.x + SUN_DIR.x * 40, y + SUN_DIR.y * 40, S.pos.z + SUN_DIR.z * 40);
+  sky.material.uniforms.uTime.value += dt;
+  lights.sun.position.set(S.pos.x + SUN_DIR.x * 80, y + SUN_DIR.y * 80, S.pos.z + SUN_DIR.z * 80);
   lights.sun.target.position.set(S.pos.x, y, S.pos.z); lights.sun.target.updateMatrixWorld();
+}
+
+/* ---------- camera: first person, third person, the cinema camera, and the fly-in at the start ---------- */
+const camWant = new THREE.Vector3(), camFocus = new THREE.Vector3(), camFrom = new THREE.Vector3();
+const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const CINE = [   // the cinema camera's shots, one after the other
+  { name: "lead", dur: 7.5, fov: 40 }, { name: "drone", dur: 7, fov: 50 }, { name: "side", dur: 7, fov: 34 },
+  { name: "low", dur: 6.5, fov: 46 }, { name: "orbit", dur: 8, fov: 38 }, { name: "shoulder", dur: 6.5, fov: 58 },
+];
+function startIntro() {
+  const h = S.heading * DEG, y = G.height(S.pos.x, S.pos.z);
+  camFrom.set(S.pos.x - Math.sin(h) * 330 + Math.cos(h) * 150, y + 210, S.pos.z + Math.cos(h) * 330 + Math.sin(h) * 150);
+  S.intro = { t: 0, dur: 6 };
+  document.body.classList.add("intro");
+}
+function endIntro() { if (!S.intro) return; S.intro = null; document.body.classList.remove("intro"); }
+function placeCamera(dt, y, moving) {
+  const yaw = S.yaw * DEG, pit = S.pitch * DEG, port = camera.aspect < 1;
+  const fwdX = Math.sin(yaw) * Math.cos(pit), fwdY = Math.sin(pit), fwdZ = -Math.cos(yaw) * Math.cos(pit);
+  S.bob = (S.bob || 0) + dt * 7.5 * (moving > 0.05 ? 1 : 0);
+  let fov = port ? 74 : 62, hideEv1 = S.view === "first";
+  // where the camera sits in the first- and third-person views
+  if (S.view === "third") {
+    const back = 5.6;
+    camWant.set(S.pos.x - fwdX * back, y + 1.8 - fwdY * back, S.pos.z - fwdZ * back);
+    camWant.y = Math.max(camWant.y, G.height(camWant.x, camWant.z) + 0.6);
+    fov = port ? 68 : 54;
+  } else camWant.set(S.pos.x, y + 1.62 + (moving > 0.05 ? Math.sin(S.bob) * 0.022 : 0), S.pos.z);
+  if (S.intro) {   // fly in from high above the route to where the walk starts
+    const I = S.intro; I.t += dt;
+    const k = ease(Math.min(1, I.t / I.dur));
+    camera.position.lerpVectors(camFrom, camWant, k);
+    camera.position.y = Math.max(camera.position.y, G.height(camera.position.x, camera.position.z) + 1.2);
+    camFocus.set(S.pos.x + Math.sin(S.heading * DEG) * 60 * (1 - k), y + 1.2, S.pos.z - Math.cos(S.heading * DEG) * 60 * (1 - k));
+    camFocus.lerp(camFrom.set(camWant.x + fwdX * 40, camWant.y + fwdY * 40, camWant.z + fwdZ * 40), k * k);
+    camFrom.copy(S.introFrom);
+    camera.lookAt(camFocus);
+    hideEv1 = S.view === "first" && k > 0.9;
+    fov = 50 + (fov - 50) * k;
+    if (I.t >= I.dur) endIntro();
+  } else if (S.view === "cine") {
+    const C = S.cine, shot = CINE[C.i], h = S.heading * DEG, fx_ = Math.sin(h), fz_ = -Math.cos(h), rx = Math.cos(h), rz = Math.sin(h);
+    C.t += dt;
+    if (C.t >= shot.dur) { C.i = (C.i + 1) % CINE.length; C.t = 0; C.fixed = null; }
+    const u = Math.min(1, C.t / shot.dur), mx = (S.pos.x + ev2.x) / 2, mz = (S.pos.z + ev2.z) / 2;
+    let px, pz, ph, lx = mx, lz = mz, lh = 1.15;
+    if (shot.name === "lead") { const dd = 11 - 4 * u; px = mx + fx_ * dd + rx * 1.6; pz = mz + fz_ * dd + rz * 1.6; ph = 1.0; }
+    else if (shot.name === "drone") { px = mx - fx_ * (46 - 10 * u) + rx * 14; pz = mz - fz_ * (46 - 10 * u) + rz * 14; ph = 30 - 8 * u; lx = mx + fx_ * 30; lz = mz + fz_ * 30; lh = 0; }
+    else if (shot.name === "side") { px = mx + rx * 13 + fx_ * (4 - 8 * u); pz = mz + rz * 13 + fz_ * (4 - 8 * u); ph = 1.5; lx = mx + fx_ * 1.5; lz = mz + fz_ * 1.5; }
+    else if (shot.name === "low") {   // a still camera near the ground; the crew walks past it
+      if (!C.fixed) C.fixed = { x: mx + fx_ * 15 - rx * 5, z: mz + fz_ * 15 - rz * 5 };
+      px = C.fixed.x; pz = C.fixed.z; ph = 0.4; lh = 1.0;
+    }
+    else if (shot.name === "orbit") { const a = h + Math.PI * (0.75 + 0.9 * u); px = mx + Math.sin(a) * 8.5; pz = mz - Math.cos(a) * 8.5; ph = 2.4 - 0.8 * u; }
+    else { px = S.pos.x - fx_ * 2.7 + rx * 0.75; pz = S.pos.z - fz_ * 2.7 + rz * 0.75; ph = 1.78; lx = S.pos.x + fx_ * 30; lz = S.pos.z + fz_ * 30; lh = 0.6; }
+    const gy = G.height(px, pz);
+    camera.position.set(px, Math.max(gy + 0.3, (shot.name === "drone" ? y : gy) + ph), pz);
+    camFocus.set(lx, G.height(lx, lz) + lh, lz);
+    camera.lookAt(camFocus);
+    fov = port ? shot.fov + 16 : shot.fov; hideEv1 = false;
+    C.cut = C.t < dt * 1.5;
+  } else {
+    if (S.view === "third" && camera.position.distanceToSquared(camWant) < 3600 && !S.camSnap) camera.position.lerp(camWant, 1 - Math.exp(-dt * 12));
+    else camera.position.copy(camWant);
+    S.camSnap = false;
+    camera.rotation.set(pit, -yaw, 0);
+  }
+  ev1.root.visible = !hideEv1;
+  const snapFov = S.view === "cine" && S.cine && S.cine.cut;
+  const nf = snapFov ? fov : camera.fov + (fov - camera.fov) * Math.min(1, dt * 5);
+  if (Math.abs(nf - camera.fov) > 0.01) { camera.fov = nf; camera.updateProjectionMatrix(); }
 }
 
 /* ---------- the numbers where you stand ---------- */
@@ -558,16 +637,16 @@ function renderMenu() {
 
 function initHud() {
   initInput();
-  $("#sFree").onclick = () => start("free");
-  $("#sPlan").onclick = () => start("plan");
+  $("#sFree").onclick = () => start("free", true);
+  $("#sPlan").onclick = () => start("plan", true);
   $("#bPlan").onclick = () => {
     closeDrill();
     if (S.mode === "plan") { const lastT = S.m.profile[S.m.profile.length - 1].t; if (!S.playing && S.T >= lastT) jump(0, true); else S.playing = !S.playing; }
     else { jump(0, true); toast("Back to base camp: following the plan from T+0:00."); }
     syncButtons(); S.hudKey = "";
   };
-  $("#bView").onclick = () => setView(S.view === "first" ? "third" : "first");
-  $("#bSpeed").onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length] || 30; syncButtons(); };
+  $("#bView").onclick = () => setView(VIEWS[(VIEWS.indexOf(S.view) + 1) % VIEWS.length]);
+  $("#bSpeed").onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length] || SPEEDS[0]; S.speedBefore = 0; syncButtons(); };
   $("#bHurt").onclick = () => openDrill("hurt");
   $("#bSuit").onclick = () => openDrill("suit");
   $("#bMenu").onclick = () => toggleMenu();
@@ -598,7 +677,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000 || 0.016);
   lastT = now;
   update(dt);
-  renderer.render(scene, camera);
+  if (fx && !S.lite) fx.render(dt); else renderer.render(scene, camera);
   placeLabels();
   if (now - hudT > 90 || S.hudKey === "") { hudT = now; S.hudKey = "ok"; if (S.started) renderHud(); }
   frames++;
@@ -607,12 +686,16 @@ function frame(now) {
     // slow device: after three slow seconds in a row, draw fewer pixels and drop the shadows
     if (S.started && document.visibilityState === "visible") {
       S.slow = S.fps < 24 ? (S.slow || 0) + 1 : 0;
-      if (S.slow >= 3 && !S.lite) { S.lite = true; renderer.setPixelRatio(1); renderer.shadowMap.enabled = false; lights.sun.castShadow = false; resize(); }
+      if (S.slow >= 3 && !S.lite) {
+        if (fx && !S.noFx) { S.noFx = true; fx = null; S.slow = 0; }   // first drop the film look, then (if still slow) the shadows and the sharpness
+        else { S.lite = true; renderer.setPixelRatio(1); renderer.shadowMap.enabled = false; lights.sun.castShadow = false; }
+        resize();
+      }
     }
   }
 }
 
 // hooks for tests: read the helmet numbers, jump to a moment, change the view (nothing here changes the plan)
-window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ ortho: !!S.ortho, fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
+window.RR3D = { S, P, nav: () => navNow(), jump, setView, start, enterFree, setTenby, openDrill, closeDrill, info: () => ({ fx: !!fx, view: S.view, intro: !!S.intro, ortho: !!S.ortho, fps: S.fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ai: !!S.aiModel, field: !!S.field }) };
 
 boot().catch((e) => { console.error(e); $("#lMsg").textContent = "Could not load the 3D walk. Please reload the page."; });
