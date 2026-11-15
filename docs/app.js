@@ -184,7 +184,7 @@
 
   function renderStopList() {
     const m = S.m, tl = m.timeline || [];
-    let html = '<div class="lbl-lg" style="display:flex;justify-content:space-between"><span>Route stops</span><span>Leave by${stag("d", "how-checks")}</span></div><ul class="stops">';
+    let html = `<div class="lbl-lg" style="display:flex;justify-content:space-between"><span>Route stops</span><span>Leave by${stag("d", "how-checks")}</span></div><ul class="stops">`;
     m.order.forEach((id, i) => {
       const s = stopById(id), last = i === m.order.length - 1, t = tl[i];
       if (last) {
