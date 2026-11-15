@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 <link rel="stylesheet" href="extra/proof-strip.css?v=1">
 <link rel="stylesheet" href="extra/daylight.css?v=1">
 <link rel="stylesheet" href="extra/cuff-card.css?v=1">
@@ -39,15 +39,15 @@
   <button class="help" id="helpBtn" aria-label="How to use Red Route" title="How to use">?</button>
 </nav>
 
-<div class="guide pnl" id="guide" role="dialog" aria-labelledby="guideTitle" hidden>
-  <div class="lbl-lg" id="guideTitle">How to use Red Route</div>
-  <p class="guide-lead">Plan a walk on Mars and check, at every step, that the crew can still get home.</p>
-  <ol class="guide-steps">
-    <li><span class="gn">1</span><div><b>Check the plan</b><small>Three green PASS checks mean the crew can always get home. Leave each stop before its "Leave by" time.</small></div></li>
-    <li><span class="gn">2</span><div><b>Walk the plan</b><small>Press Walk the plan. The blue dot is the crew; the green area is where they can still get home from. Astronaut view shows the crew's own screen.</small></div></li>
-    <li><span class="gn">3</span><div><b>Change it</b><small>Drag a numbered stop on the map, or open Plan your EVA. Every check updates at once.</small></div></li>
+<div class="guide-scrim" id="guideScrim" hidden></div>
+<div class="guide hero pnl" id="guide" role="dialog" aria-labelledby="guideTitle" hidden>
+  <div class="guide-eyebrow">Red Route &middot; NASA Space Apps 2026 &middot; Martian Map</div>
+  <h1 class="guide-hook" id="guideTitle">If a crewmate <em>gets hurt</em> out here, can you still <em>get home</em>?</h1>
+  <p class="guide-lead">Red Route plans a Marswalk in Jezero Crater on NASA's real 1&nbsp;m terrain, and checks that answer at every minute of the walk.</p>
+  <ol class="guide-stops" aria-label="What the tour shows">
+    <li>The plan</li><li>The walk</li><li>A hurt crewmate</li><li>A real solar storm</li><li>One stop too many</li><li>The proof</li><li>The 3D walk</li>
   </ol>
-  <div class="guide-bar"><button class="cta" id="guideGo"><span class="tri"></span>Walk the plan</button><button class="ghost" id="guideClose">I'll look around</button></div>
+  <div class="guide-bar"><button class="cta" id="guideTour"><span class="tri"></span>Take the 1-minute tour</button><button class="ghost" id="guideGo">Walk the plan</button><button class="ghost" id="guideClose">I'll look around</button></div>
 </div>
 
 <aside class="pnl left" id="left">
@@ -126,7 +126,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="extra/storm-replay.js?v=2"></script>
-<script src="app.js?v=31"></script>
+<script src="app.js?v=32"></script>
 <script src="extra/proof-strip.js?v=1" defer></script>
 <script src="extra/daylight.js?v=1" defer></script>
 <script src="extra/cuff-card.js?v=1" defer></script>

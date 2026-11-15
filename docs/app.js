@@ -1306,12 +1306,12 @@
   wireClose(document);
   $("#about").addEventListener("click", (e) => { if (e.target.id === "about") { e.currentTarget.hidden = true; syncNav(); } });
 
-  /* ---------- first-visit guide: 3 steps, numbers pulse on the real controls ---------- */
-  const GUIDE_KEY = "rr-guide-v1";
-  function openGuide() { $("#guide").hidden = false; document.body.classList.add("guide-on"); }
+  /* ---------- start screen (first visit, and the "?" button): the question the app answers, and the way into the tour ---------- */
+  const GUIDE_KEY = "rr-guide-v2";
+  function openGuide() { endTour(); $("#guide").hidden = false; $("#guideScrim").hidden = false; document.body.classList.add("guide-on"); }
   function closeGuide() {
     if ($("#guide").hidden) return;
-    $("#guide").hidden = true;
+    $("#guide").hidden = true; $("#guideScrim").hidden = true;
     document.body.classList.remove("guide-on");
     try { localStorage.setItem(GUIDE_KEY, "seen"); } catch (e) { /* private mode: show it again next time */ }
   }
@@ -1323,7 +1323,104 @@
   // phones: the guide sits under the clock, so go back to the top first, where the map and the crew dot are
   $("#guideGo").onclick = () => { closeGuide(); if (isMobile()) window.scrollTo({ top: 0, behavior: "smooth" }); play(); };
   $("#guideClose").onclick = closeGuide;
+  $("#guideScrim").onclick = closeGuide;
+  $("#guideTour").onclick = () => { closeGuide(); startTour(); };
   $("#helpBtn").onclick = () => ($("#guide").hidden ? openGuide() : closeGuide());
+
+  /* ---------- guided tour: seven steps that drive the real app ----------
+     Every step calls the same functions as the app's own buttons (the clock, the drills, the stop tick box, "How it
+     works"), on the plan that is loaded. Nothing is staged, and the numbers in the text are read from the plan. */
+  const tour = { i: -1, hl: null, tenby: false };
+  const tourEl = el("div", "tour-card");
+  tourEl.hidden = true; tourEl.setAttribute("role", "dialog"); tourEl.setAttribute("aria-label", "Guided tour");
+  document.body.appendChild(tourEl);
+  const tenbyBox = () => document.querySelector('input[data-stop="top"]');
+  const setTenby = (on) => { const inp = tenbyBox(); if (inp && inp.checked !== on) { inp.checked = on; replan(); } };
+  const closeAbout = () => { if (!$("#about").hidden) { $("#about").hidden = true; syncNav(); } };
+  const crewInView = () => { if (eva.nav && eva.nav.pos) map.panTo(eva.nav.pos, { animate: true, duration: 0.5 }); };
+  const TOUR = [
+    { k: "The plan", hl: "#left", show: "#left",
+      t: (m) => `Two science stops, ${m.totals.dist_km} km, home in ${fmtMin(m.totals.eva_h * 60)}. Every minute of the walk has to pass three checks: home in time at normal pace, home in time at half speed helping a hurt crewmate, and never more than ${m.walkback.suit ? m.walkback.suit.limit_min : 50} minutes' walk from base.`,
+      enter() { pause(); closeDrill(); fitRoute(); } },
+    { k: "The walk", hl: "#timeline", top: true,
+      t: () => "The blue dot is the crew. Green is everywhere they can still get home from, even at half speed. Watch it shrink as the walk goes on.",
+      enter() { closeDrill(); setTime(0); play(); } },
+    { k: "A crewmate is hurt", top: true,
+      t: (m) => { const w = m.walkback.bad && m.walkback.bad.worst; if (!w) return "Press \"Crewmate hurt here\" at any moment: the app answers from that exact spot."; const ok = w.margin_min >= 0;
+        return `The worst moment for it is here, at T+${hm(w.t)}. Half speed, one crew member helping the other, the reserve untouched. The card answers from this exact spot: ${ok ? `they make it, with ${Math.round(w.margin_min)} min to spare` : `they do not make it, by ${Math.round(-w.margin_min)} min`}. The whole plan is built around this check.`; },
+      enter() { pause(); const w = S.m.walkback.bad && S.m.walkback.bad.worst; setTime(w ? Math.max(0, w.t - 0.02) : S.m.profile[S.m.profile.length - 1].t / 2); crewInView(); openDrill("hurt"); } },
+    { k: "A real solar storm", top: true,
+      t: (m) => { const SR = window.StormReplay, back = m.walkback.suit ? m.walkback.suit.worst.back : 0, need = Math.ceil(back - 1e-9) + GET_INSIDE_MIN;
+        if (!SR) return "Press \"Storm warning now\" and pick a warning time: the app says if the crew gets inside in time.";
+        const warn = Math.floor(SR.alarmToPeakMin);
+        return `The solar storm that NASA's Curiosity measured on 20 May 2024, replayed from its own readings. From the farthest point of the walk the crew needs ${need} min to be inside; the strongest reading came ${warn} min after the alarm. ${need > warn ? "Still outside at the peak, and the app says so." : "Inside before the peak."}`; },
+      enter() { pause(); closeDrill(); const w = S.m.walkback.suit && S.m.walkback.suit.worst; setTime(w ? w.t : 0); crewInView(); if (window.StormReplay) drill.warn = "real"; openDrill("storm"); } },
+    { k: "One stop too many", hl: "#left", show: "#left",
+      t: () => (tenbyBox() ? "The tour has just ticked the third stop, Tenby. Watch the first check turn red: the plan no longer fits. A bad plan should fail here, at the planning table, not halfway through the walk." : "Open \"Plan your EVA\" and add a stop: if the walk no longer fits, the first check turns red."),
+      enter() { pause(); closeDrill(); const inp = tenbyBox(); if (inp && !inp.checked) { tour.tenby = true; setTenby(true); } },
+      leave() { if (tour.tenby) { tour.tenby = false; planId++; resetPlan(); } } },
+    { k: "The proof", top: true,
+      t: () => "\"What we checked, and what failed\": every claim sits next to its limit. The slope map against Perseverance's tilt sensor, 1,000 simulated bad days, Apollo's real delays, a real storm, and the checks this walk fails.",
+      enter() { pause(); closeDrill(); openModal("about"); syncNav(); const h = document.getElementById("how-checked"); if (h) h.scrollIntoView({ block: "start" }); },
+      leave() { closeAbout(); } },
+    { k: "Walk it yourself", hl: ".tl-side", show: "#timeline",
+      t: () => "Astronaut view is the crew's own screen: one word, GO or TURN BACK NOW. The 3D walk puts you on the ground at true scale, with the same numbers. Then drag a stop, move a rule, or press a drill at any moment.",
+      enter() { pause(); closeDrill(); fitRoute(); }, last: true },
+  ];
+  function tourHl(sel) {
+    if (tour.hl) tour.hl.classList.remove("tour-hl");
+    tour.hl = sel ? document.querySelector(sel) : null;
+    if (tour.hl) tour.hl.classList.add("tour-hl");
+  }
+  function renderTour() {
+    const s = TOUR[tour.i], n = TOUR.length;
+    tourEl.innerHTML = `<div class="tour-top"><span class="lbl">Tour · ${tour.i + 1} of ${n}</span><button class="x" data-tour="end" aria-label="End the tour">&times;</button></div>
+      <div class="tour-bar"><i style="width:${((tour.i + 1) / n) * 100}%"></i></div>
+      <div class="tour-k">${s.k}</div><p class="tour-t">${s.t(S.m)}</p>
+      <div class="tour-btns">${tour.i > 0 ? '<button class="ghost" data-tour="back">Back</button>' : ""}${s.last
+        ? '<a class="cta" href="3d/"><span class="tri"></span>Open the 3D walk</a><button class="ghost" data-tour="end">Finish</button>'
+        : '<button class="cta" data-tour="next"><span class="tri"></span>Next</button>'}</div>`;
+    tourEl.hidden = false;
+    // phones: the page scrolls, so bring the part this step talks about into view, just under the tour card
+    if (isMobile()) {
+      const target = s.top ? null : document.querySelector(s.show || s.hl || "#map");
+      const y = target ? Math.max(0, target.getBoundingClientRect().top + window.scrollY - tourEl.getBoundingClientRect().height - 20) : 0;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
+  }
+  function goTour(i) {
+    if (!S.m || i < 0 || i >= TOUR.length) return;
+    const cur = TOUR[tour.i];
+    if (cur && cur.leave) cur.leave();
+    tour.i = i;
+    const s = TOUR[i];
+    s.enter();
+    tourHl(s.hl);
+    renderTour();
+  }
+  function startTour() {
+    if (!S.m) return;
+    closeAbout();
+    planId++; resetPlan();   // the tour is about the default walk, with its stored numbers
+    document.body.classList.add("tour-on");
+    goTour(0);
+  }
+  function endTour() {
+    if (tour.i < 0) return;
+    const cur = TOUR[tour.i];
+    if (cur && cur.leave) cur.leave();
+    tour.i = -1;
+    tourHl(null); closeDrill(); closeAbout(); pause();
+    tourEl.hidden = true;
+    document.body.classList.remove("tour-on");
+  }
+  tourEl.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tour]"); if (!b) return;
+    if (b.dataset.tour === "next") goTour(tour.i + 1);
+    else if (b.dataset.tour === "back") goTour(tour.i - 1);
+    else endTour();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && tour.i >= 0) endTour(); });
 
   /* ---------- photo gallery ---------- */
   const lb = { s: null, k: 0 };

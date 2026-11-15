@@ -475,3 +475,50 @@ body.astro-on { overflow: hidden; }
 .walk3d::after { content: "\203A"; font-size: 16px; line-height: 1; color: var(--route); margin-top: -2px; }
 .walk3d:hover, .walk3d:focus-visible { background: rgba(255,255,255,.06); color: var(--route); }
 @media (max-width: 900px) { .tl-side { width: 84px; } .walk3d { height: 38px; font-size: 10.5px; letter-spacing: .1em; } }
+
+/* ---------- start screen (the question the app answers) and the guided tour ---------- */
+.guide-scrim { position: fixed; inset: 0; z-index: 3900; background: radial-gradient(ellipse at 50% 44%, rgba(6,7,9,.5) 0%, rgba(6,7,9,.88) 72%); }
+.guide-scrim[hidden] { display: none; }
+.guide.hero { z-index: 4000; width: min(620px, calc(100vw - 32px)); padding: 30px 34px 26px; transform: translate(-50%, -52%);
+  background: rgba(9,10,12,.95); border-top: 2px solid var(--route); box-shadow: 0 28px 90px rgba(0,0,0,.75); animation: heroIn .45s ease both; }
+@keyframes heroIn { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -52%); } }
+.guide-eyebrow { font: 600 11px var(--cond); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.guide-hook { margin: 14px 0 14px; font: 600 36px/1.12 Barlow, sans-serif; letter-spacing: -.005em; color: #fff; text-wrap: balance; }
+.guide-hook em { font-style: normal; color: var(--route); }
+.guide.hero .guide-lead { margin: 0 0 18px; font-size: 15.5px; line-height: 1.5; color: #d9dcdf; }
+.guide-stops { list-style: none; margin: 0 0 22px; padding: 14px 0 0; border-top: 1px solid var(--line-2); display: flex; flex-wrap: wrap; gap: 8px 18px;
+  counter-reset: stop; font: 600 11px var(--cond); letter-spacing: .13em; text-transform: uppercase; color: #c5c9cd; }
+.guide-stops li { counter-increment: stop; white-space: nowrap; }
+.guide-stops li::before { content: counter(stop); color: var(--route); margin-right: 7px; }
+.guide.hero .guide-bar { margin-top: 0; flex-wrap: wrap; }
+.guide.hero .cta { padding: 13px 20px; font-size: 13px; cursor: pointer; }
+.guide.hero .ghost { cursor: pointer; }
+
+.tour-card { position: fixed; right: 14px; top: 88px; z-index: 4200; width: 384px; padding: 15px 18px 16px; background: rgba(9,10,12,.97);
+  border: 1px solid var(--line); border-top: 2px solid var(--route); border-radius: 2px; box-shadow: 0 18px 60px rgba(0,0,0,.7); }
+.tour-card[hidden] { display: none; }
+.tour-top { display: flex; justify-content: space-between; align-items: center; }
+.tour-card .lbl { font: 600 11px var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.tour-card .x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.tour-bar { height: 2px; background: var(--line-2); margin: 10px 0 13px; }
+.tour-bar i { display: block; height: 100%; background: var(--route); transition: width .3s ease; }
+.tour-k { font: 700 23px/1.15 Barlow, sans-serif; margin: 0 0 8px; color: #fff; }
+.tour-t { margin: 0 0 15px; font-size: 14px; line-height: 1.5; color: #d9dcdf; }
+.tour-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tour-btns .cta { cursor: pointer; text-decoration: none; }
+.tour-btns .ghost { padding: 10px 14px; cursor: pointer; }
+.tour-hl { outline: 2px solid var(--route); outline-offset: 2px; box-shadow: 0 0 0 7px rgba(255,106,61,.16) !important; }
+@media (max-width: 900px) {
+  .guide.hero { position: fixed; left: 10px; right: 10px; top: 50%; transform: translateY(-50%); margin: 0; padding: 22px 18px 18px; max-height: 94vh; max-height: 94svh; overflow-y: auto; animation: none; }
+  .guide-hook { font-size: 27px; margin: 10px 0 12px; }
+  .guide.hero .guide-lead { font-size: 14.5px; margin-bottom: 14px; }
+  .guide-stops { margin-bottom: 16px; gap: 7px 14px; }
+  .guide.hero .guide-bar button { flex: 1 1 auto; justify-content: center; }
+  .guide.hero .guide-bar .cta { flex-basis: 100%; }
+  .tour-card { left: 8px; right: 8px; top: 8px; width: auto; padding: 11px 14px 12px; }
+  .tour-bar { margin: 7px 0 9px; }
+  .tour-k { font-size: 18px; margin-bottom: 5px; }
+  .tour-t { font-size: 13px; line-height: 1.42; margin-bottom: 10px; }
+  .tour-btns .cta, .tour-btns .ghost { min-height: 40px; }
+  .tour-card .x { min-width: 40px; min-height: 32px; }
+}
