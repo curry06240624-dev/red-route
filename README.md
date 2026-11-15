@@ -26,6 +26,7 @@ landing circle with slopes under 5°.
 - **Safety:** three get-home checks, each with its breaking point (how much slower the walk can be before it fails), a leave-by time for every stop, an EVA clock with a shrinking "can still get home" zone, the 50-minute backup-oxygen line, and bad-day drill buttons (crewmate hurt, suit alarm, storm warning, running late) that answer from the crew's position.
 - **Surface view:** 16 Perseverance photos per stop (Mastcam-Z, Navcam, Hazcam, SuperCam), what the rover did there with NASA sources, and the terrain within 50 m.
 - **Conditions:** NASA DONKI space-weather notices (read live from NASA's CCMC service; NOT CHECKED if it does not answer), the latest available Perseverance MEDA weather summaries (sol 1133, April 2024; not live), and a quiet-day radiation dose for the walk from Curiosity RAD's published average at Gale Crater (for scale only).
+- **Take it with you:** a one-page printable cuff card made from the current plan (our own sketch of the walk, stops with arrive and leave-by times, the three checks, the turn-back rules, the planning numbers and their sources) and a GeoJSON download of the route.
 - **Daylight:** the walk day worked out with the NASA GISS Mars24 method: pick a start time in local solar time and see when the crew is back, when the Sun sets, and whether oxygen or daylight sets each leave-by time (flat horizon, no twilight margin).
 - **Context:** Perseverance's real traverse.
 

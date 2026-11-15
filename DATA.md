@@ -27,6 +27,7 @@ Planetary Science Conference.
 |---|---|---|---|
 | Mars24 Sunclock algorithm and technical notes (after Allison and McEwen 2000, Planet. Space Sci. 48, 215-235) | NASA Goddard Institute for Space Studies | https://www.giss.nasa.gov/tools/mars24/help/algorithm.html and https://www.giss.nasa.gov/tools/mars24/help/notes.html | Mars local solar time, sunrise and sunset for the daylight block. Our code is tested against the page's worked example. |
 | Mars Fact Sheet | NASA NSSDC | https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html | The planet's shape, to turn the plan's latitude into the latitude Mars24 uses. |
+| Apollo 11 glove checklists (a historical note on the printable cuff card) | NASA Apollo Lunar Surface Journal, "EVA Preparations" | https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11.evaprep.html | One sentence on the cuff card: Apollo crews wore a checklist page on the glove. |
 | Leap seconds (Bulletin C) | IERS, Paris Observatory | https://hpiers.obspm.fr/iers/bul/bulc/Leap_Second.dat | The difference between atomic time and UTC, needed by the Mars24 method. |
 
 ## Space agency partner data
