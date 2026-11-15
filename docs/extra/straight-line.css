@@ -1,0 +1,22 @@
+/* AI use: the code in this file was written by an AI coding assistant (Claude, by Anthropic), directed by the team. See "Use of AI tools" in README.md. */
+/* Red Route add-on: "Straight lines between stops" block in the Layers drawer (docs/extra/straight-line.js). */
+.slx { margin: -2px 0 10px 24px; }
+.slx-hint { display: block; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+.slx-sum { margin: 2px 0 8px; font-size: 13px; line-height: 1.4; color: var(--text); }
+.slx-sum b { font-weight: 600; }
+.slx-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.slx-tbl th { padding: 0 0 4px 8px; font: 600 10px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  text-align: right; white-space: nowrap; }
+.slx-tbl td { padding: 3px 0 3px 8px; border-top: 1px solid var(--line-2); text-align: right; white-space: nowrap; }
+.slx-tbl th:first-child, .slx-tbl td:first-child { padding-left: 0; text-align: left; }
+.slx-tbl td:first-child { color: var(--muted); }
+.slx-tbl tr.slx-leg td { padding-top: 8px; border-top: 1px solid var(--line); font: 600 11px var(--cond); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text); white-space: normal; }
+.slx-src { margin: 8px 0 2px; font-size: 11px; color: var(--muted); }
+.slx-src b { font: 700 10.5px var(--cond); letter-spacing: .12em; color: #d6dae0; }
+.slx-how { margin: 0; font-size: 11px; line-height: 1.4; color: var(--dim); }
+/* Phones: the app's ".pnl { max-height: none !important }" lifts the drawer's height limit, so with this table the
+   Layers drawer would grow past the top of the screen and hide its close button. Keep the 70vh that ".drawer" asks for
+   (the drawer already scrolls inside). The map's zoom buttons and credit line (z-index 1000) are drawn over the drawer
+   (950) on phones; lift the drawer just above them so they do not sit on top of the table. */
+@media (max-width: 900px) { #layersPanel { max-height: 70vh !important; z-index: 1001; } }
