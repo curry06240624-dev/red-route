@@ -67,6 +67,12 @@ nothing drawn on them and no AI). On that page the Mars colours, the rocks (thei
 their shapes are made up), footprints, dust, the sky, the sun position, the habitat shape, the film look and the sound
 are an illustration made by our code; the sound is not a recording. The astronaut model is the only AI-made thing there.
 
+`docs/3d/assets/DATA_LAYERS.md` lists the page's other picture layers, all made from NASA data with no AI: the far ground and
+crater rim on the horizon (CTX elevation model of Jezero, 20 m, USGS Astrogeology; CTX mosaic, NASA/JPL/MSSS, from NASA JPL
+Mars Trek) and two layers worked out from the 1 m HiRISE elevation model (which way the ground faces, and where hills hide
+the page's sun). The sun on the 3D page is fixed for the picture (low in the west-north-west); it is not the Mars24 daylight
+of the planner. These layers change how the 3D picture looks and never change a time or a margin.
+
 Base camp is not a checked landing site. It was placed on top of the delta so that the loop fits the time rules.
 Within 100 m the ground reaches 19.5° on our 2 m slope grid; the Artemis III EVA study
 (https://ntrs.nasa.gov/citations/20210026296) draws a 100 m landing circle with slopes under 5°.
